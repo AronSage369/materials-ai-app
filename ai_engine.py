@@ -26,7 +26,7 @@ class MaterialsAIEngine:
         self.api_key = api_key
         genai.configure(api_key=api_key)
         
-        model_names = ['gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro', 'models/gemini-pro']
+        model_names = ['gemini-2.5-pro', 'gemini-2.5-flash']
         
         for model_name in model_names:
             try:
