@@ -67,28 +67,28 @@ class PubChemManager:
         return base_params
     
     def _generate_default_search_terms(self, material_class: str) -> List[str]:
-        """Generate default search terms based on material class"""
-        term_libraries = {
-            'coolant': [
-                'siloxane', 'polydimethylsiloxane', 'polyalphaolefin', 'PAO',
-                'mineral oil', 'synthetic ester', 'polyol ester', 'propylene glycol',
-                'ethylene glycol', 'paraffin oil', 'alkanes', 'silicone oil'
-            ],
-            'adsorbent': [
-                'zeolite', 'activated carbon', 'silica gel', 'MOF', 'metal organic framework',
-                'porous polymer', 'mesoporous silica', 'alumina', 'clay', 'carbon molecular sieve'
-            ],
-            'catalyst': [
-                'palladium', 'platinum', 'ruthenium', 'rhodium', 'zeolite', 'alumina',
-                'silica', 'titania', 'zirconia', 'molecular sieve', 'heterogeneous catalyst'
-            ],
-            'polymer': [
-                'polyethylene', 'polypropylene', 'polystyrene', 'PVC', 'nylon',
-                'polycarbonate', 'PET', 'PTFE', 'polyurethane', 'epoxy resin'
-            ]
-        }
-        
-        return term_libraries.get(material_class, ['organic compound', 'industrial chemical'])
+    """Generate better search terms that actually return results"""
+    term_libraries = {
+        'coolant': [
+            # More specific terms that work in PubChem
+            'dimethyl siloxane', 'polydimethylsiloxane', 'hexamethyldisiloxane',
+            'octamethyltrisiloxane', 'decamethylcyclopentasiloxane',
+            'mineral oil', 'paraffin oil', 'white oil',
+            'propylene glycol', 'ethylene glycol', 'polyethylene glycol',
+            'polyalphaolefin', 'synthetic hydrocarbon', 'alkylbenzene',
+            'ester oil', 'diester', 'polyol ester', 'pentaerythritol ester',
+            'fluorocarbon', 'perfluoropolyether'
+        ],
+        'adsorbent': [
+            'zeolite', 'activated carbon', 'silica gel', 'alumina',
+            'molecular sieve', 'porous polymer', 'mesoporous silica'
+        ],
+        'catalyst': [
+            'palladium', 'platinum', 'ruthenium', 'zeolite', 'alumina'
+        ]
+    }
+    
+    return term_libraries.get(material_class, ['organic compound', 'chemical'])
     
     def _find_property_specialists(self, strategy: Dict, search_terms: List[str], params: Dict) -> Dict[str, List]:
         """Find compounds that excel in specific properties"""
