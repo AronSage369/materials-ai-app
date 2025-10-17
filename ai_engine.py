@@ -1,9 +1,10 @@
-# ai_engine.py - Advanced AI with Gemini integration
+# ai_engine.py - FIXED VERSION
 import google.generativeai as genai
 import json
 import re
 from typing import Dict, List, Any
 import streamlit as st
+import time
 
 class MaterialsAIEngine:
     def __init__(self):
@@ -11,74 +12,73 @@ class MaterialsAIEngine:
         self.model = None
         self.property_databases = {
             'thermal': ['thermal_conductivity', 'specific_heat', 'viscosity', 'flash_point', 'pour_point'],
-            'adsorption': ['surface_area', 'pore_volume', 'adsorption_capacity', 'selectivity', 'regeneration_energy'],
-            'catalytic': ['turnover_frequency', 'selectivity', 'stability', 'overpotential', 'active_sites'],
-            'mechanical': ['tensile_strength', 'youngs_modulus', 'hardness', 'toughness', 'elongation'],
-            'optical': ['refractive_index', 'band_gap', 'transmittance', 'reflectance', 'absorption_coefficient']
+            'adsorption': ['surface_area', 'pore_volume', 'adsorption_capacity', 'selectivity'],
+            'catalytic': ['turnover_frequency', 'selectivity', 'stability'],
+            'mechanical': ['tensile_strength', 'youngs_modulus', 'hardness'],
+            'optical': ['refractive_index', 'band_gap', 'transmittance']
         }
     
-    # In ai_engine.py, change this line in set_api_key method:
     def set_api_key(self, api_key: str):
-    """Set Gemini API key and initialize model"""
-    self.api_key = api_key
-    genai.configure(api_key=api_key)
-    
-    # Use the correct model name - UPDATED
-    try:
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
-    except:
-        # Fallback to other model names
-        try:
-            self.model = genai.GenerativeModel('gemini-pro')
-        except:
-            st.error("❌ No compatible Gemini model found. Please check available models.")
+        """Set Gemini API key and initialize model"""
+        if not api_key:
+            st.error("❌ No API key provided")
+            return
+            
+        self.api_key = api_key
+        genai.configure(api_key=api_key)
+        
+        # Try different model names
+        model_names = ['gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro', 'models/gemini-pro']
+        
+        for model_name in model_names:
+            try:
+                self.model = genai.GenerativeModel(model_name)
+                st.sidebar.success(f"✅ Using model: {model_name}")
+                return
+            except Exception as e:
+                continue
+        
+        st.error("❌ Could not initialize any Gemini model")
+        self.model = None
     
     def interpret_challenge(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
         """Use Gemini to interpret challenge and extract requirements"""
         
+        if not self.model:
+            st.warning("⚠️ Using default strategy - AI model not available")
+            return self.get_default_strategy(material_type)
+        
+        # Clean and shorten the challenge text for the API
+        clean_text = self.clean_challenge_text(challenge_text)
+        
         prompt = f"""
-        You are an expert materials scientist and chemical engineer. Analyze the following materials challenge and extract structured requirements.
+        You are an expert materials scientist. Analyze this challenge and extract key requirements.
 
-        CHALLENGE: {challenge_text}
+        CHALLENGE: {clean_text}
         MATERIAL TYPE: {material_type}
 
-        Extract the following information as a JSON object:
+        Extract the key technical requirements and return as JSON with:
+        - material_class
+        - target_properties (with min/max/target/weight)
+        - safety_constraints
+        - search_strategy with chemical_classes and search_terms
 
-        1. material_class: The primary material category
-        2. critical_requirements: Must-have properties with minimum/maximum values
-        3. performance_targets: Optimization goals with ideal ranges  
-        4. safety_constraints: Toxicity, environmental, regulatory requirements
-        5. practical_constraints: Cost, availability, synthesis complexity
-        6. search_strategy: Recommended chemical classes and search terms
-        7. priority_weights: Relative importance of each property (sum to 1.0)
-
-        Return ONLY valid JSON, no other text.
-
-        Example output format:
+        Example:
         {{
             "material_class": "coolant",
-            "critical_requirements": {{
-                "flash_point": {{"min": 150, "unit": "°C"}},
-                "viscosity_100c": {{"max": 10, "unit": "cSt"}},
-                "pfas_free": true
+            "target_properties": {{
+                "thermal_conductivity": {{"min": 0.1, "target": 0.15, "unit": "W/m·K", "weight": 0.3}},
+                "viscosity_100c": {{"max": 10, "target": 5, "unit": "cSt", "weight": 0.2}},
+                "flash_point": {{"min": 150, "target": 200, "unit": "°C", "weight": 0.15}}
             }},
-            "performance_targets": {{
-                "thermal_conductivity": {{"min": 0.12, "target": 0.15, "unit": "W/m·K", "weight": 0.3}},
-                "specific_heat": {{"min": 1800, "target": 2200, "unit": "J/kg·K", "weight": 0.2}}
-            }},
-            "safety_constraints": ["non_toxic", "non_flammable", "biodegradable"],
-            "practical_constraints": ["cost_effective", "readily_available"],
+            "safety_constraints": ["non_toxic", "pfas_free", "non_flammable"],
             "search_strategy": {{
                 "chemical_classes": ["silicones", "synthetic_esters", "polyalphaolefins"],
                 "search_terms": ["siloxane", "polyol ester", "PAO", "mineral oil"]
-            }},
-            "priority_weights": {{
-                "safety": 0.3,
-                "performance": 0.4,
-                "cost": 0.2,
-                "availability": 0.1
             }}
         }}
+
+        Return ONLY valid JSON.
         """
         
         try:
@@ -86,29 +86,53 @@ class MaterialsAIEngine:
             json_str = self.extract_json_from_response(response.text)
             strategy = json.loads(json_str)
             
-            # Merge into target_properties for compatibility
-            target_properties = {}
-            if 'critical_requirements' in strategy:
-                target_properties.update(strategy['critical_requirements'])
-            if 'performance_targets' in strategy:
-                target_properties.update(strategy['performance_targets'])
-            
-            strategy['target_properties'] = target_properties
+            # Validate and add missing fields
+            strategy = self.validate_strategy(strategy, material_type)
             return strategy
             
         except Exception as e:
-            st.error(f"AI interpretation failed: {e}")
-            # Return default strategy
+            st.warning(f"⚠️ AI interpretation failed, using default strategy: {str(e)}")
             return self.get_default_strategy(material_type)
+    
+    def clean_challenge_text(self, text: str) -> str:
+        """Clean and shorten challenge text for API"""
+        # Take first 2000 characters to avoid token limits
+        clean_text = text[:2000]
+        
+        # Remove excessive whitespace
+        clean_text = ' '.join(clean_text.split())
+        
+        return clean_text
     
     def extract_json_from_response(self, response_text: str) -> str:
         """Extract JSON from Gemini response"""
         # Look for JSON pattern
+        json_match = re.search(r'\{[^{}]*\{[^{}]*\}[^{}]*\}', response_text, re.DOTALL)
+        if json_match:
+            return json_match.group()
+        
+        # Fallback: look for any JSON-like structure
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             return json_match.group()
         else:
             raise ValueError("No JSON found in AI response")
+    
+    def validate_strategy(self, strategy: Dict, material_type: str) -> Dict:
+        """Validate and complete strategy with defaults"""
+        if 'material_class' not in strategy:
+            strategy['material_class'] = material_type.lower()
+        
+        if 'target_properties' not in strategy:
+            strategy['target_properties'] = self.get_default_strategy(material_type)['target_properties']
+        
+        if 'search_strategy' not in strategy:
+            strategy['search_strategy'] = self.get_default_strategy(material_type)['search_strategy']
+        
+        if 'safety_constraints' not in strategy:
+            strategy['safety_constraints'] = ['non_toxic', 'pfas_free']
+        
+        return strategy
     
     def get_default_strategy(self, material_type: str) -> Dict[str, Any]:
         """Provide default strategy if AI fails"""
@@ -119,23 +143,30 @@ class MaterialsAIEngine:
                     "thermal_conductivity": {"min": 0.1, "target": 0.15, "unit": "W/m·K", "weight": 0.25},
                     "viscosity_100c": {"max": 10, "target": 5, "unit": "cSt", "weight": 0.2},
                     "flash_point": {"min": 150, "target": 200, "unit": "°C", "weight": 0.15},
-                    "pour_point": {"max": -20, "target": -40, "unit": "°C", "weight": 0.1}
+                    "pour_point": {"max": -20, "target": -40, "unit": "°C", "weight": 0.1},
+                    "specific_heat": {"min": 1800, "target": 2200, "unit": "J/kg·K", "weight": 0.15}
                 },
+                "safety_constraints": ["non_toxic", "pfas_free", "non_flammable"],
                 "search_strategy": {
                     "chemical_classes": ["silicones", "esters", "polyalphaolefins", "glycols"],
-                    "search_terms": ["siloxane", "polyol ester", "PAO", "propylene glycol"]
+                    "search_terms": [
+                        "dimethyl siloxane", "polydimethylsiloxane", "hexamethyldisiloxane",
+                        "mineral oil", "paraffin oil", "polyalphaolefin", "propylene glycol",
+                        "ethylene glycol", "ester oil", "polyol ester"
+                    ]
                 }
             },
             "Adsorbent": {
                 "material_class": "adsorbent", 
                 "target_properties": {
-                    "surface_area": {"min": 500, "target": 1500, "unit": "m²/g", "weight": 0.3},
-                    "pore_volume": {"min": 0.3, "target": 0.8, "unit": "cm³/g", "weight": 0.25},
-                    "adsorption_capacity": {"min": 2, "target": 5, "unit": "mmol/g", "weight": 0.25}
+                    "surface_area": {"min": 500, "target": 1500, "unit": "m²/g", "weight": 0.4},
+                    "pore_volume": {"min": 0.3, "target": 0.8, "unit": "cm³/g", "weight": 0.3},
+                    "adsorption_capacity": {"min": 2, "target": 5, "unit": "mmol/g", "weight": 0.3}
                 },
+                "safety_constraints": ["non_toxic", "stable"],
                 "search_strategy": {
-                    "chemical_classes": ["zeolites", "MOFs", "activated_carbons", "silicas"],
-                    "search_terms": ["zeolite", "MOF", "activated carbon", "silica gel"]
+                    "chemical_classes": ["zeolites", "activated_carbons", "silicas", "MOFs"],
+                    "search_terms": ["zeolite", "activated carbon", "silica gel", "alumina"]
                 }
             }
         }
@@ -143,75 +174,68 @@ class MaterialsAIEngine:
         return default_strategies.get(material_type, default_strategies["Coolant/Lubricant"])
     
     def generate_formulations(self, compounds_data: Dict, strategy: Dict) -> List[Dict]:
-        """Generate optimized multi-compound formulations using AI"""
+        """Generate optimized multi-compound formulations"""
         
         formulations = []
         specialists = compounds_data.get('specialists', {})
         balanced = compounds_data.get('balanced', [])
         
+        st.write(f"📊 Generating formulations from {len(balanced)} balanced compounds and {len(specialists)} specialist categories...")
+        
         # Single compound formulations from balanced candidates
-        for i, (compound, score) in enumerate(balanced[:5]):
+        for i, (compound, score) in enumerate(balanced[:3]):
             formulations.append({
                 'compounds': [compound],
                 'ratios': [1.0],
-                'strategy': 'single_compound',
-                'base_score': score
+                'strategy': f'single_compound_{i+1}',
+                'base_score': score,
+                'composition_type': 'single'
             })
         
         # Specialist-enhanced formulations
         if balanced and specialists:
-            base_compound = balanced[0][0]  # Best balanced compound
+            base_compound, base_score = balanced[0]  # Best balanced compound
             
             for prop_name, specialist_list in specialists.items():
-                if specialist_list:
+                if specialist_list and len(specialist_list) > 0:
                     specialist = specialist_list[0]  # Best specialist for this property
                     
                     formulations.append({
                         'compounds': [base_compound, specialist],
                         'ratios': [0.7, 0.3],
                         'strategy': f'base_plus_{prop_name}_specialist',
-                        'base_score': balanced[0][1] * 0.7 + 0.3  # Weighted score
+                        'base_score': base_score * 0.7 + 0.3,
+                        'composition_type': 'binary'
                     })
         
-        # Specialist combinations (no base)
-        specialist_combinations = self.create_specialist_combinations(specialists)
-        formulations.extend(specialist_combinations)
+        # Binary combinations of balanced compounds
+        if len(balanced) >= 2:
+            for i in range(min(2, len(balanced))):
+                for j in range(i+1, min(3, len(balanced))):
+                    comp1, score1 = balanced[i]
+                    comp2, score2 = balanced[j]
+                    
+                    formulations.append({
+                        'compounds': [comp1, comp2],
+                        'ratios': [0.5, 0.5],
+                        'strategy': f'balanced_combo_{i+1}_{j+1}',
+                        'base_score': (score1 + score2) / 2,
+                        'composition_type': 'binary'
+                    })
         
+        st.write(f"✅ Generated {len(formulations)} formulations")
         return formulations
     
-    def create_specialist_combinations(self, specialists: Dict) -> List[Dict]:
-        """Create formulations combining multiple specialists"""
-        combinations = []
-        specialist_lists = list(specialists.values())
-        
-        # Take top specialist from each of first 3 properties
-        top_specialists = []
-        for prop_list in specialist_lists[:3]:
-            if prop_list:
-                top_specialists.append(prop_list[0])
-        
-        if len(top_specialists) >= 2:
-            # Binary combination
-            combinations.append({
-                'compounds': top_specialists[:2],
-                'ratios': [0.5, 0.5],
-                'strategy': 'specialist_binary_combo',
-                'base_score': 0.6
-            })
-        
-        if len(top_specialists) >= 3:
-            # Ternary combination  
-            combinations.append({
-                'compounds': top_specialists[:3],
-                'ratios': [0.4, 0.3, 0.3],
-                'strategy': 'specialist_ternary_combo', 
-                'base_score': 0.65
-            })
-        
-        return combinations
-    
     def evaluate_and_rank_formulations(self, formulations: List[Dict], strategy: Dict, min_confidence: float) -> Dict[str, Any]:
-        """Use AI to evaluate formulations and provide final ranking"""
+        """Evaluate formulations and provide final ranking"""
+        
+        if not formulations:
+            st.warning("❌ No formulations to evaluate")
+            return {
+                'top_formulations': [],
+                'search_metrics': {'compounds_evaluated': 0, 'formulations_generated': 0, 'formulations_approved': 0},
+                'strategy': strategy
+            }
         
         ranked_formulations = []
         
@@ -223,26 +247,19 @@ class MaterialsAIEngine:
             feasibility = formulation.get('feasibility', {})
             compatibility_score = self.calculate_compatibility_score(feasibility)
             
-            # Calculate practical score
-            practical_score = self.calculate_practical_score(formulation)
-            
-            # Overall score (weighted average)
-            overall_score = (
-                property_score * 0.6 + 
-                compatibility_score * 0.3 + 
-                practical_score * 0.1
-            )
+            # Overall score
+            overall_score = (property_score * 0.7 + compatibility_score * 0.3)
             
             # AI decision
             ai_decision = self.generate_ai_decision(formulation, overall_score, min_confidence)
             
-            # Update formulation with scores and decision
+            # Update formulation
             formulation['score'] = overall_score
             formulation['ai_decision'] = ai_decision
             formulation['property_score'] = property_score
             formulation['compatibility_score'] = compatibility_score
             
-            if ai_decision['approved'] or overall_score >= min_confidence:
+            if ai_decision['approved']:
                 ranked_formulations.append(formulation)
         
         # Sort by score
@@ -251,9 +268,9 @@ class MaterialsAIEngine:
         return {
             'top_formulations': ranked_formulations[:10],
             'search_metrics': {
-                'compounds_evaluated': len(formulations) * 2,  # Estimate
+                'compounds_evaluated': len(formulations) * 2,
                 'formulations_generated': len(formulations),
-                'formulations_approved': len([f for f in ranked_formulations if f['ai_decision']['approved']])
+                'formulations_approved': len(ranked_formulations)
             },
             'strategy': strategy
         }
@@ -272,14 +289,16 @@ class MaterialsAIEngine:
             min_value = criteria.get('min')
             max_value = criteria.get('max')
             
-            pred_value = predicted_props.get(prop_name, {})
-            if isinstance(pred_value, dict):
-                pred_value = pred_value.get('value', 0)
+            pred_value_data = predicted_props.get(prop_name, {})
+            pred_value = pred_value_data.get('value', 0) if isinstance(pred_value_data, dict) else pred_value_data
             
             if target_value is not None and pred_value:
                 # Score based on proximity to target
-                normalized_diff = abs(pred_value - target_value) / max(target_value, 1)
-                prop_score = max(0, 1 - normalized_diff)
+                if target_value > 0:
+                    normalized_diff = abs(pred_value - target_value) / target_value
+                    prop_score = max(0, 1 - normalized_diff)
+                else:
+                    prop_score = 0.5
             elif min_value is not None and pred_value:
                 # Score based on exceeding minimum
                 prop_score = 1.0 if pred_value >= min_value else pred_value / min_value
@@ -303,47 +322,32 @@ class MaterialsAIEngine:
         issues = feasibility.get('compatibility_issues', [])
         
         base_score = 1.0 - risk_score
-        # Penalize for each compatibility issue
         issue_penalty = len(issues) * 0.1
         
         return max(0, base_score - issue_penalty)
-    
-    def calculate_practical_score(self, formulation: Dict) -> float:
-        """Calculate practical implementation score"""
-        compounds = formulation.get('compounds', [])
-        
-        # Simple heuristic: fewer compounds = more practical
-        compound_count = len(compounds)
-        count_score = 1.0 if compound_count == 1 else 0.8 if compound_count == 2 else 0.6
-        
-        return count_score
     
     def generate_ai_decision(self, formulation: Dict, overall_score: float, min_confidence: float) -> Dict:
         """Generate AI decision with explanations"""
         
         approved = overall_score >= min_confidence
         
-        # Generate reasons based on formulation characteristics
         reasons = []
         if overall_score >= 0.8:
-            reasons.append("Excellent property match with target requirements")
+            reasons.append("Excellent property match with requirements")
         elif overall_score >= 0.6:
-            reasons.append("Good overall performance with minor optimizations needed")
+            reasons.append("Good overall performance")
         else:
-            reasons.append("Marginal performance - significant improvements required")
+            reasons.append("Marginal performance - needs improvement")
         
-        # Add specific notes
         compounds = formulation.get('compounds', [])
         if len(compounds) == 1:
-            reasons.append("Single compound formulation - simple implementation")
+            reasons.append("Single compound - simple implementation")
         else:
-            reasons.append(f"Multi-compound formulation ({len(compounds)} components) - potential synergistic effects")
+            reasons.append(f"Multi-compound formulation - potential synergies")
         
         feasibility = formulation.get('feasibility', {})
         if feasibility.get('risk_score', 0) < 0.3:
-            reasons.append("Good chemical compatibility predicted")
-        elif feasibility.get('risk_score', 0) < 0.6:
-            reasons.append("Moderate compatibility risk - requires experimental validation")
+            reasons.append("Good chemical compatibility")
         
         return {
             'approved': approved,
