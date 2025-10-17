@@ -17,11 +17,21 @@ class MaterialsAIEngine:
             'optical': ['refractive_index', 'band_gap', 'transmittance', 'reflectance', 'absorption_coefficient']
         }
     
+    # In ai_engine.py, change this line in set_api_key method:
     def set_api_key(self, api_key: str):
-        """Set Gemini API key and initialize model"""
-        self.api_key = api_key
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+    """Set Gemini API key and initialize model"""
+    self.api_key = api_key
+    genai.configure(api_key=api_key)
+    
+    # Use the correct model name - UPDATED
+    try:
+        self.model = genai.GenerativeModel('gemini-1.5-pro')
+    except:
+        # Fallback to other model names
+        try:
+            self.model = genai.GenerativeModel('gemini-pro')
+        except:
+            st.error("❌ No compatible Gemini model found. Please check available models.")
     
     def interpret_challenge(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
         """Use Gemini to interpret challenge and extract requirements"""
