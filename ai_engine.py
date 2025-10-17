@@ -1,4 +1,4 @@
-# ai_engine.py - FIXED VERSION
+# ai_engine.py - CORRECTED INDENTATION
 import google.generativeai as genai
 import json
 import re
@@ -19,7 +19,6 @@ class MaterialsAIEngine:
         }
     
     def set_api_key(self, api_key: str):
-        """Set Gemini API key and initialize model"""
         if not api_key:
             st.error("❌ No API key provided")
             return
@@ -27,7 +26,6 @@ class MaterialsAIEngine:
         self.api_key = api_key
         genai.configure(api_key=api_key)
         
-        # Try different model names
         model_names = ['gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro', 'models/gemini-pro']
         
         for model_name in model_names:
@@ -40,15 +38,12 @@ class MaterialsAIEngine:
         
         st.error("❌ Could not initialize any Gemini model")
         self.model = None
-    
+
     def interpret_challenge(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
-        """Use Gemini to interpret challenge and extract requirements"""
-        
         if not self.model:
             st.warning("⚠️ Using default strategy - AI model not available")
             return self.get_default_strategy(material_type)
         
-        # Clean and shorten the challenge text for the API
         clean_text = self.clean_challenge_text(challenge_text)
         
         prompt = f"""
@@ -85,41 +80,30 @@ class MaterialsAIEngine:
             response = self.model.generate_content(prompt)
             json_str = self.extract_json_from_response(response.text)
             strategy = json.loads(json_str)
-            
-            # Validate and add missing fields
             strategy = self.validate_strategy(strategy, material_type)
             return strategy
             
         except Exception as e:
             st.warning(f"⚠️ AI interpretation failed, using default strategy: {str(e)}")
             return self.get_default_strategy(material_type)
-    
+
     def clean_challenge_text(self, text: str) -> str:
-        """Clean and shorten challenge text for API"""
-        # Take first 2000 characters to avoid token limits
         clean_text = text[:2000]
-        
-        # Remove excessive whitespace
         clean_text = ' '.join(clean_text.split())
-        
         return clean_text
-    
+
     def extract_json_from_response(self, response_text: str) -> str:
-        """Extract JSON from Gemini response"""
-        # Look for JSON pattern
         json_match = re.search(r'\{[^{}]*\{[^{}]*\}[^{}]*\}', response_text, re.DOTALL)
         if json_match:
             return json_match.group()
         
-        # Fallback: look for any JSON-like structure
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             return json_match.group()
         else:
             raise ValueError("No JSON found in AI response")
-    
+
     def validate_strategy(self, strategy: Dict, material_type: str) -> Dict:
-        """Validate and complete strategy with defaults"""
         if 'material_class' not in strategy:
             strategy['material_class'] = material_type.lower()
         
@@ -133,9 +117,8 @@ class MaterialsAIEngine:
             strategy['safety_constraints'] = ['non_toxic', 'pfas_free']
         
         return strategy
-    
+
     def get_default_strategy(self, material_type: str) -> Dict[str, Any]:
-        """Provide default strategy if AI fails"""
         default_strategies = {
             "Coolant/Lubricant": {
                 "material_class": "coolant",
@@ -172,17 +155,14 @@ class MaterialsAIEngine:
         }
         
         return default_strategies.get(material_type, default_strategies["Coolant/Lubricant"])
-    
+
     def generate_formulations(self, compounds_data: Dict, strategy: Dict) -> List[Dict]:
-        """Generate optimized multi-compound formulations"""
-        
         formulations = []
         specialists = compounds_data.get('specialists', {})
         balanced = compounds_data.get('balanced', [])
         
         st.write(f"📊 Generating formulations from {len(balanced)} balanced compounds and {len(specialists)} specialist categories...")
         
-        # Single compound formulations from balanced candidates
         for i, (compound, score) in enumerate(balanced[:3]):
             formulations.append({
                 'compounds': [compound],
@@ -192,13 +172,12 @@ class MaterialsAIEngine:
                 'composition_type': 'single'
             })
         
-        # Specialist-enhanced formulations
         if balanced and specialists:
-            base_compound, base_score = balanced[0]  # Best balanced compound
+            base_compound, base_score = balanced[0]
             
             for prop_name, specialist_list in specialists.items():
                 if specialist_list and len(specialist_list) > 0:
-                    specialist = specialist_list[0]  # Best specialist for this property
+                    specialist = specialist_list[0]
                     
                     formulations.append({
                         'compounds': [base_compound, specialist],
@@ -208,7 +187,6 @@ class MaterialsAIEngine:
                         'composition_type': 'binary'
                     })
         
-        # Binary combinations of balanced compounds
         if len(balanced) >= 2:
             for i in range(min(2, len(balanced))):
                 for j in range(i+1, min(3, len(balanced))):
@@ -225,10 +203,8 @@ class MaterialsAIEngine:
         
         st.write(f"✅ Generated {len(formulations)} formulations")
         return formulations
-    
+
     def evaluate_and_rank_formulations(self, formulations: List[Dict], strategy: Dict, min_confidence: float) -> Dict[str, Any]:
-        """Evaluate formulations and provide final ranking"""
-        
         if not formulations:
             st.warning("❌ No formulations to evaluate")
             return {
@@ -240,20 +216,12 @@ class MaterialsAIEngine:
         ranked_formulations = []
         
         for formulation in formulations:
-            # Calculate property performance score
             property_score = self.calculate_property_score(formulation, strategy)
-            
-            # Calculate compatibility score
             feasibility = formulation.get('feasibility', {})
             compatibility_score = self.calculate_compatibility_score(feasibility)
-            
-            # Overall score
             overall_score = (property_score * 0.7 + compatibility_score * 0.3)
-            
-            # AI decision
             ai_decision = self.generate_ai_decision(formulation, overall_score, min_confidence)
             
-            # Update formulation
             formulation['score'] = overall_score
             formulation['ai_decision'] = ai_decision
             formulation['property_score'] = property_score
@@ -262,7 +230,6 @@ class MaterialsAIEngine:
             if ai_decision['approved']:
                 ranked_formulations.append(formulation)
         
-        # Sort by score
         ranked_formulations.sort(key=lambda x: x['score'], reverse=True)
         
         return {
@@ -274,9 +241,8 @@ class MaterialsAIEngine:
             },
             'strategy': strategy
         }
-    
+
     def calculate_property_score(self, formulation: Dict, strategy: Dict) -> float:
-        """Calculate how well formulation meets property targets"""
         total_score = 0
         total_weight = 0
         
@@ -293,30 +259,26 @@ class MaterialsAIEngine:
             pred_value = pred_value_data.get('value', 0) if isinstance(pred_value_data, dict) else pred_value_data
             
             if target_value is not None and pred_value:
-                # Score based on proximity to target
                 if target_value > 0:
                     normalized_diff = abs(pred_value - target_value) / target_value
                     prop_score = max(0, 1 - normalized_diff)
                 else:
                     prop_score = 0.5
             elif min_value is not None and pred_value:
-                # Score based on exceeding minimum
                 prop_score = 1.0 if pred_value >= min_value else pred_value / min_value
             elif max_value is not None and pred_value:
-                # Score based on being below maximum  
                 prop_score = 1.0 if pred_value <= max_value else max_value / pred_value
             else:
-                prop_score = 0.5  # Default score
+                prop_score = 0.5
             
             total_score += prop_score * weight
             total_weight += weight
         
         return total_score / max(total_weight, 0.1)
-    
+
     def calculate_compatibility_score(self, feasibility: Dict) -> float:
-        """Calculate compatibility score"""
         if not feasibility:
-            return 0.7  # Default if no compatibility check
+            return 0.7
         
         risk_score = feasibility.get('risk_score', 0.5)
         issues = feasibility.get('compatibility_issues', [])
@@ -325,10 +287,8 @@ class MaterialsAIEngine:
         issue_penalty = len(issues) * 0.1
         
         return max(0, base_score - issue_penalty)
-    
+
     def generate_ai_decision(self, formulation: Dict, overall_score: float, min_confidence: float) -> Dict:
-        """Generate AI decision with explanations"""
-        
         approved = overall_score >= min_confidence
         
         reasons = []
