@@ -167,111 +167,168 @@ class MaterialsAIEngine:
         }
 
     def multi_agent_formulation_generation(self, compounds: List[Dict], strategy: Dict, innovation_factor: float) -> List[Dict]:
-        """Generate formulations using multiple AI agents"""
-        all_formulations = []
+    """Generate formulations using multiple AI agents with solute-solvent combinations"""
+    all_formulations = []
+    
+    # Categorize compounds by physical state and properties
+    categorized_compounds = self._categorize_compounds_by_state(compounds, strategy)
+    
+    # Filter compounds by categories
+    balanced_compounds = [c for c in compounds if c.get('category') == 'balanced']
+    specialist_compounds = [c for c in compounds if c.get('category') == 'specialist']
+    general_compounds = [c for c in compounds if c.get('category') == 'general']
+    
+    # Run each agent with weighted probability
+    agent_weights = self._calculate_agent_weights(innovation_factor)
+    
+    for agent_name, weight in agent_weights.items():
+        num_formulations = max(1, int(15 * weight))  # Increased from 10 to 15
         
-        # Filter compounds by categories
-        balanced_compounds = [c for c in compounds if c.get('category') == 'balanced']
-        specialist_compounds = [c for c in compounds if c.get('category') == 'specialist']
-        
-        # Run each agent with weighted probability based on innovation factor
-        agent_weights = self._calculate_agent_weights(innovation_factor)
-        
-        for agent_name, weight in agent_weights.items():
-            num_formulations = max(1, int(10 * weight))  # Scale based on weight
-            
-            for _ in range(num_formulations):
+        for _ in range(num_formulations):
+            # Include solute-solvent combinations for appropriate agents
+            if agent_name in ['innovative', 'high_performance', 'balanced']:
                 formulation = getattr(self, f'_{agent_name}_agent')(
-                    balanced_compounds, specialist_compounds, strategy
+                    balanced_compounds, specialist_compounds, strategy, categorized_compounds
                 )
-                if formulation:
-                    formulation['agent_type'] = self.agents[agent_name]['name']
-                    all_formulations.append(formulation)
-        
-        # Remove duplicates based on composition fingerprint
-        unique_formulations = self._remove_duplicate_formulations(all_formulations)
-        return unique_formulations
+            else:
+                formulation = getattr(self, f'_{agent_name}_agent')(
+                    balanced_compounds, specialist_compounds, strategy, None
+                )
+                
+            if formulation:
+                formulation['agent_type'] = self.agents[agent_name]['name']
+                all_formulations.append(formulation)
+    
+    # Remove duplicates
+    unique_formulations = self._remove_duplicate_formulations(all_formulations)
+    return unique_formulations
 
-    def _calculate_agent_weights(self, innovation_factor: float) -> Dict[str, float]:
-        """Calculate agent weights based on innovation factor"""
-        base_weights = {
-            'conservative': 0.8 - innovation_factor * 0.6,
-            'practical': 1.0,
-            'balanced': 1.2,
-            'innovative': 0.5 + innovation_factor * 0.8,
-            'high_performance': 0.3 + innovation_factor * 0.7
-        }
+    def _categorize_compounds_by_state(self, compounds: List[Dict], strategy: Dict) -> Dict[str, List[Dict]]:
+    """Categorize compounds by likely physical state and function"""
+    categorized = {
+        'likely_solvents': [],
+        'likely_solutes': [],
+        'additives': [],
+        'polymers': []
+    }
+    
+    for compound in compounds:
+        mw = compound.get('molecular_weight', 0)
+        logp = compound.get('logp', 0)
+        complexity = compound.get('complexity', 0)
         
-        # Normalize weights
-        total = sum(base_weights.values())
-        return {k: v/total for k, v in base_weights.items()}
+        # Simple heuristics for categorization
+        if mw < 500 and logp < 5 and complexity < 300:
+            categorized['likely_solvents'].append(compound)
+        elif mw > 150 or complexity > 200:
+            categorized['likely_solutes'].append(compound)
+        elif mw > 1000:
+            categorized['polymers'].append(compound)
+        else:
+            categorized['additives'].append(compound)
+    
+    return categorized
 
-    def _conservative_agent(self, balanced_compounds, specialist_compounds, strategy):
-        """Conservative agent focusing on safety and simplicity"""
-        if not balanced_compounds:
-            return None
-            
-        # Prefer 1-2 component systems
-        num_components = random.choices([1, 2, 3], weights=[0.5, 0.3, 0.2])[0]
-        selected_compounds = random.sample(balanced_compounds, min(num_components, len(balanced_compounds)))
-        
-        return self._create_formulation_structure(selected_compounds, strategy, 'conservative')
-
-    def _innovative_agent(self, balanced_compounds, specialist_compounds, strategy):
-        """Innovative agent exploring novel combinations"""
-        all_compounds = balanced_compounds + specialist_compounds
-        if not all_compounds:
-            return None
-            
+    def _innovative_agent(self, balanced_compounds, specialist_compounds, strategy, categorized_compounds):
+    """Innovative agent exploring novel combinations including solute-solvent systems"""
+    all_compounds = balanced_compounds + specialist_compounds
+    if not all_compounds:
+        return None
+    
+    # Decide on formulation type: pure, mixture, or solute-solvent
+    formulation_type = random.choices(
+        ['pure', 'mixture', 'solute_solvent'], 
+        weights=[0.2, 0.4, 0.4]
+    )[0]
+    
+    if formulation_type == 'solute_solvent' and categorized_compounds:
+        formulation = self._create_solute_solvent_formulation(categorized_compounds, strategy)
+    else:
         # More components and creative ratios
         num_components = random.choices([2, 3, 4, 5], weights=[0.2, 0.3, 0.3, 0.2])[0]
         selected_compounds = random.sample(all_compounds, min(num_components, len(all_compounds)))
-        
         formulation = self._create_formulation_structure(selected_compounds, strategy, 'innovative')
-        
-        # Add innovative reasoning
-        formulation['reasoning'] = "Exploring synergistic effects between multiple components for enhanced performance."
-        return formulation
+    
+    formulation['reasoning'] = "Exploring novel combinations and synergistic effects between components."
+    formulation['formulation_type'] = formulation_type
+    return formulation
 
-    def _practical_agent(self, balanced_compounds, specialist_compounds, strategy):
-        """Practical agent balancing performance and practicality"""
-        if not balanced_compounds:
-            return None
-            
-        # Focus on balanced compounds with practical considerations
-        num_components = random.choices([1, 2, 3, 4], weights=[0.2, 0.4, 0.3, 0.1])[0]
-        selected_compounds = random.sample(balanced_compounds, min(num_components, len(balanced_compounds)))
-        
-        formulation = self._create_formulation_structure(selected_compounds, strategy, 'practical')
-        formulation['reasoning'] = "Optimizing for practical implementation while maintaining good performance."
-        return formulation
+    def _create_solute_solvent_formulation(self, categorized_compounds: Dict, strategy: Dict) -> Dict:
+    """Create solute-solvent formulation"""
+    solvents = categorized_compounds.get('likely_solvents', [])
+    solutes = categorized_compounds.get('likely_solutes', [])
+    additives = categorized_compounds.get('additives', [])
+    
+    if not solvents:
+        # Fallback to regular formulation
+        all_compounds = solvents + solutes + additives
+        selected = random.sample(all_compounds, min(3, len(all_compounds)))
+        return self._create_formulation_structure(selected, strategy, 'innovative')
+    
+    # Select 1-2 solvents as base
+    num_solvents = random.choices([1, 2], weights=[0.7, 0.3])[0]
+    selected_solvents = random.sample(solvents, min(num_solvents, len(solvents)))
+    
+    # Select 0-2 solutes
+    num_solutes = random.choices([0, 1, 2], weights=[0.3, 0.5, 0.2])[0]
+    selected_solutes = random.sample(solutes, min(num_solutes, len(solutes)))
+    
+    # Select 0-1 additives
+    num_additives = random.choices([0, 1], weights=[0.7, 0.3])[0]
+    selected_additives = random.sample(additives, min(num_additives, len(additives)))
+    
+    all_components = selected_solvents + selected_solutes + selected_additives
+    
+    formulation = self._create_formulation_structure(all_components, strategy, 'innovative')
+    
+    # Adjust mass percentages for solute-solvent systems
+    if selected_solvents and (selected_solutes or selected_additives):
+        formulation = self._adjust_solute_solvent_percentages(formulation, selected_solvents)
+    
+    formulation['solvent_components'] = [comp['cid'] for comp in selected_solvents]
+    formulation['solute_components'] = [comp['cid'] for comp in selected_solutes]
+    
+    return formulation
 
-    def _high_performance_agent(self, balanced_compounds, specialist_compounds, strategy):
-        """High-performance agent maximizing key metrics"""
-        # Prefer specialist compounds for peak performance
-        compounds_to_use = specialist_compounds if specialist_compounds else balanced_compounds
-        if not compounds_to_use:
-            return None
-            
-        num_components = random.choices([1, 2, 3], weights=[0.3, 0.4, 0.3])[0]
-        selected_compounds = random.sample(compounds_to_use, min(num_components, len(compounds_to_use)))
+    def _adjust_solute_solvent_percentages(self, formulation: Dict, solvents: List[Dict]) -> Dict:
+    """Adjust mass percentages for solute-solvent systems"""
+    composition = formulation['composition']
+    
+    # Identify solvent and non-solvent components
+    solvent_cids = {solvent['cid'] for solvent in solvents}
+    solvent_mass_total = 0
+    other_mass_total = 0
+    
+    for comp in composition:
+        if comp['cid'] in solvent_cids:
+            solvent_mass_total += comp['mass_percentage']
+        else:
+            other_mass_total += comp['mass_percentage']
+    
+    # Adjust to typical solute-solvent ratios (5-30% solute)
+    if other_mass_total > 0 and solvent_mass_total > 0:
+        target_solute_ratio = random.uniform(0.05, 0.3)  # 5-30% solute
+        current_solute_ratio = other_mass_total / 100
         
-        formulation = self._create_formulation_structure(selected_compounds, strategy, 'high_performance')
-        formulation['reasoning'] = "Maximizing key performance metrics through optimized component selection."
-        return formulation
-
-    def _balanced_agent(self, balanced_compounds, specialist_compounds, strategy):
-        """Balanced agent seeking optimal trade-offs"""
-        all_compounds = balanced_compounds + specialist_compounds
-        if not all_compounds:
-            return None
+        if current_solute_ratio > target_solute_ratio:
+            # Reduce solute percentage
+            scale_factor = target_solute_ratio / current_solute_ratio
+            for comp in composition:
+                if comp['cid'] not in solvent_cids:
+                    comp['mass_percentage'] *= scale_factor
             
-        num_components = random.choices([2, 3, 4], weights=[0.4, 0.4, 0.2])[0]
-        selected_compounds = random.sample(all_compounds, min(num_components, len(all_compounds)))
-        
-        formulation = self._create_formulation_structure(selected_compounds, strategy, 'balanced')
-        formulation['reasoning'] = "Seeking optimal balance across all performance, safety, and practical criteria."
-        return formulation
+            # Recalculate solvent percentages to sum to 100
+            total_other = sum(comp['mass_percentage'] for comp in composition if comp['cid'] not in solvent_cids)
+            total_solvent = 100 - total_other
+            
+            # Distribute solvent mass proportionally
+            for comp in composition:
+                if comp['cid'] in solvent_cids:
+                    comp['mass_percentage'] = (comp['mass_percentage'] / solvent_mass_total) * total_solvent
+    
+    # Recalculate mole ratios
+    formulation['composition'] = self._calculate_mole_ratios(composition)
+    return formulation
 
     def _create_formulation_structure(self, compounds: List[Dict], strategy: Dict, agent_type: str) -> Dict:
         """Create a structured formulation from selected compounds"""
