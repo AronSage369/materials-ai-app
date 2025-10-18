@@ -23,7 +23,7 @@ class MaterialsAIEngine:
         genai.configure(api_key=api_key)
         
         # FIX: Using stable model names to prevent 404 errors. 'gemini-pro' is a reliable choice.
-        model_names = ['gemini-pro', 'gemini-1.5-flash-latest']
+        model_names = ['gemini-2.5-pro', 'gemini-2.5-flash']
         
         for model_name in model_names:
             try:
