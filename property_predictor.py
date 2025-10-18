@@ -1,9 +1,13 @@
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 import re
+import random
+import logging
+from utils import cached, MemoryManager, PropertyCalculator
 
 class AdvancedPropertyPredictor:
     def __init__(self):
+        self.logger = logging.getLogger(__name__)
         self.property_models = {
             'thermal_conductivity': self.predict_thermal_conductivity,
             'viscosity': self.predict_viscosity,
@@ -20,6 +24,7 @@ class AdvancedPropertyPredictor:
             'toxicity': self.predict_toxicity
         }
         
+    @cached
     def predict_all_properties(self, formulations: List[Dict], 
                              target_properties: Dict) -> List[Dict]:
         """Predict all required properties for formulations"""
@@ -38,7 +43,7 @@ class AdvancedPropertyPredictor:
                         predicted_properties[prop_name] = value
                         confidence_scores[prop_name] = confidence
                     except Exception as e:
-                        print(f"Error predicting {prop_name}: {e}")
+                        self.logger.error(f"Error predicting {prop_name}: {e}")
                         predicted_properties[prop_name] = 0.0
                         confidence_scores[prop_name] = 0.0
             
@@ -67,14 +72,14 @@ class AdvancedPropertyPredictor:
         solvent_cids = set(formulation.get('solvent_components', []))
         solute_cids = set(formulation.get('solute_components', []))
         
-        solvents = [comp for comp in composition if comp['cid'] in solvent_cids]
-        solutes = [comp for comp in composition if comp['cid'] in solute_cids]
+        solvents = [comp for comp in composition if comp.get('cid') in solvent_cids]
+        solutes = [comp for comp in composition if comp.get('cid') in solute_cids]
         
         if not solvents or not solutes:
             return enhanced
         
         # Calculate solute concentration
-        solute_concentration = sum(comp['mass_percentage'] for comp in solutes) / 100
+        solute_concentration = sum(comp.get('mass_percentage', 0) for comp in solutes) / 100
         
         # Enhance predictions based on solute concentration
         for prop in enhanced:
@@ -129,7 +134,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.7
             return final_value, confidence
         except Exception as e:
-            print(f"Error in thermal conductivity prediction: {e}")
+            self.logger.error(f"Error in thermal conductivity prediction: {e}")
             return 0.2, 0.3
 
     def predict_viscosity(self, formulation: Dict) -> Tuple[float, float]:
@@ -148,7 +153,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.8
             return final_value, confidence
         except Exception as e:
-            print(f"Error in viscosity prediction: {e}")
+            self.logger.error(f"Error in viscosity prediction: {e}")
             return 10.0, 0.3
 
     def predict_boiling_point(self, formulation: Dict) -> Tuple[float, float]:
@@ -167,7 +172,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.75
             return final_value, confidence
         except Exception as e:
-            print(f"Error in boiling point prediction: {e}")
+            self.logger.error(f"Error in boiling point prediction: {e}")
             return 100.0, 0.3
 
     def predict_flash_point(self, formulation: Dict) -> Tuple[float, float]:
@@ -182,7 +187,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.65
             return base_value, confidence
         except Exception as e:
-            print(f"Error in flash point prediction: {e}")
+            self.logger.error(f"Error in flash point prediction: {e}")
             return 50.0, 0.3
 
     def predict_specific_heat(self, formulation: Dict) -> Tuple[float, float]:
@@ -197,7 +202,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.7
             return base_value, confidence
         except Exception as e:
-            print(f"Error in specific heat prediction: {e}")
+            self.logger.error(f"Error in specific heat prediction: {e}")
             return 2.0, 0.3
 
     def predict_density(self, formulation: Dict) -> Tuple[float, float]:
@@ -212,7 +217,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.8
             return base_value, confidence
         except Exception as e:
-            print(f"Error in density prediction: {e}")
+            self.logger.error(f"Error in density prediction: {e}")
             return 1.0, 0.3
 
     def predict_surface_tension(self, formulation: Dict) -> Tuple[float, float]:
@@ -227,7 +232,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.6
             return base_value, confidence
         except Exception as e:
-            print(f"Error in surface tension prediction: {e}")
+            self.logger.error(f"Error in surface tension prediction: {e}")
             return 30.0, 0.3
 
     def predict_refractive_index(self, formulation: Dict) -> Tuple[float, float]:
@@ -242,7 +247,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.7
             return base_value, confidence
         except Exception as e:
-            print(f"Error in refractive index prediction: {e}")
+            self.logger.error(f"Error in refractive index prediction: {e}")
             return 1.4, 0.3
 
     def predict_dielectric_constant(self, formulation: Dict) -> Tuple[float, float]:
@@ -257,7 +262,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.65
             return base_value, confidence
         except Exception as e:
-            print(f"Error in dielectric constant prediction: {e}")
+            self.logger.error(f"Error in dielectric constant prediction: {e}")
             return 10.0, 0.3
 
     def predict_solubility_parameter(self, formulation: Dict) -> Tuple[float, float]:
@@ -273,7 +278,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.6
             return base_value, confidence
         except Exception as e:
-            print(f"Error in solubility parameter prediction: {e}")
+            self.logger.error(f"Error in solubility parameter prediction: {e}")
             return 20.0, 0.3
 
     def predict_absorption_capacity(self, formulation: Dict) -> Tuple[float, float]:
@@ -285,7 +290,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.5
             return base_value, confidence
         except Exception as e:
-            print(f"Error in absorption capacity prediction: {e}")
+            self.logger.error(f"Error in absorption capacity prediction: {e}")
             return 0.5, 0.3
 
     def predict_thermal_stability(self, formulation: Dict) -> Tuple[float, float]:
@@ -297,7 +302,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.6
             return stability, confidence
         except Exception as e:
-            print(f"Error in thermal stability prediction: {e}")
+            self.logger.error(f"Error in thermal stability prediction: {e}")
             return 0.7, 0.3
 
     def predict_toxicity(self, formulation: Dict) -> Tuple[float, float]:
@@ -309,7 +314,7 @@ class AdvancedPropertyPredictor:
             confidence = 0.4  # Low confidence for toxicity predictions
             return toxicity, confidence
         except Exception as e:
-            print(f"Error in toxicity prediction: {e}")
+            self.logger.error(f"Error in toxicity prediction: {e}")
             return 0.3, 0.2
 
     def _get_average_molecular_weight(self, formulation: Dict) -> float:
@@ -326,7 +331,7 @@ class AdvancedPropertyPredictor:
                 
             return weighted_mw / total_mass if total_mass > 0 else 100
         except Exception as e:
-            print(f"Error calculating average MW: {e}")
+            self.logger.error(f"Error calculating average MW: {e}")
             return 100.0
 
     def _get_mw(self, compound: Dict) -> float:
@@ -365,7 +370,7 @@ class AdvancedPropertyPredictor:
             
             return np.mean(complexities) if complexities else 0.5
         except Exception as e:
-            print(f"Error calculating complexity factor: {e}")
+            self.logger.error(f"Error calculating complexity factor: {e}")
             return 0.5
 
     def _get_polarity_factor(self, formulation: Dict) -> float:
@@ -398,7 +403,7 @@ class AdvancedPropertyPredictor:
             
             return np.mean(polarity_scores) if polarity_scores else 0.3
         except Exception as e:
-            print(f"Error calculating polarity factor: {e}")
+            self.logger.error(f"Error calculating polarity factor: {e}")
             return 0.3
 
     def _get_porosity_factor(self, formulation: Dict) -> float:
@@ -412,5 +417,5 @@ class AdvancedPropertyPredictor:
             porosity = (1 - min(avg_mw / 2000, 1)) * complexity
             return min(porosity, 1.0)
         except Exception as e:
-            print(f"Error calculating porosity factor: {e}")
+            self.logger.error(f"Error calculating porosity factor: {e}")
             return 0.5
