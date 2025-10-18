@@ -1,9 +1,12 @@
 import re
+import logging
 from typing import Dict, List, Any, Tuple
 import numpy as np
+from utils import cached, MemoryManager
 
 class CompatibilityChecker:
     def __init__(self):
+        self.logger = logging.getLogger(__name__)
         # Enhanced incompatibility database
         self.incompatible_pairs = {
             # Acid-Base reactions
@@ -61,58 +64,84 @@ class CompatibilityChecker:
             'strong_base': r'sodium hydroxide|potassium hydroxide|NaOH|KOH'
         }
 
+    @cached
     def validate_all_formulations(self, formulations: List[Dict]) -> List[Dict]:
         """Validate chemical compatibility for all formulations"""
         for formulation in formulations:
-            if len(formulation.get('composition', [])) > 1:
-                validation_result = self.validate_mixture(formulation)
-                formulation.update(validation_result)
-            else:
-                # Single component - generally compatible
+            try:
+                if len(formulation.get('composition', [])) > 1:
+                    validation_result = self.validate_mixture(formulation)
+                    formulation.update(validation_result)
+                else:
+                    # Single component - generally compatible
+                    formulation.update({
+                        'compatibility_risk': 0.1,
+                        'compatibility_issues': [],
+                        'compatibility_warnings': ['Single component - generally stable'],
+                        'compatibility_summary': 'Compatible'
+                    })
+            except Exception as e:
+                self.logger.error(f"Error validating formulation: {e}")
                 formulation.update({
-                    'compatibility_risk': 0.1,
-                    'compatibility_issues': [],
-                    'compatibility_warnings': ['Single component - generally stable']
+                    'compatibility_risk': 0.5,
+                    'compatibility_issues': [f"Validation error: {str(e)}"],
+                    'compatibility_warnings': ['Validation failed - assume medium risk'],
+                    'compatibility_summary': 'Validation Error'
                 })
                 
         return formulations
 
     def validate_mixture(self, formulation: Dict) -> Dict[str, Any]:
         """Validate chemical compatibility of a mixture"""
-        composition = formulation.get('composition', [])
-        issues = []
-        total_risk = 0.0
-        checked_pairs = set()
-        
-        # Check all pairwise combinations
-        for i in range(len(composition)):
-            for j in range(i + 1, len(composition)):
-                comp1, comp2 = composition[i], composition[j]
-                pair_key = tuple(sorted([comp1.get('cid'), comp2.get('cid')]))
-                
-                if pair_key in checked_pairs:
-                    continue
+        try:
+            composition = formulation.get('composition', [])
+            issues = []
+            total_risk = 0.0
+            checked_pairs = set()
+            
+            # Check all pairwise combinations
+            for i in range(len(composition)):
+                for j in range(i + 1, len(composition)):
+                    comp1, comp2 = composition[i], composition[j]
+                    cid1, cid2 = comp1.get('cid'), comp2.get('cid')
                     
-                checked_pairs.add(pair_key)
-                
-                # Check compatibility for this pair
-                pair_issues, pair_risk = self._check_pair_compatibility(comp1, comp2)
-                issues.extend(pair_issues)
-                total_risk = max(total_risk, pair_risk)  # Use maximum risk from any pair
-        
-        # Calculate overall risk considering mixture complexity
-        complexity_factor = self._calculate_complexity_factor(composition)
-        overall_risk = min(1.0, total_risk * complexity_factor)
-        
-        # Generate warnings based on risk level
-        warnings = self._generate_compatibility_warnings(overall_risk, issues)
-        
-        return {
-            'compatibility_risk': overall_risk,
-            'compatibility_issues': issues,
-            'compatibility_warnings': warnings,
-            'compatibility_summary': self._generate_compatibility_summary(overall_risk)
-        }
+                    # Create a unique pair key
+                    if cid1 and cid2:
+                        pair_key = tuple(sorted([cid1, cid2]))
+                    else:
+                        pair_key = tuple(sorted([comp1.get('name', ''), comp2.get('name', '')]))
+                    
+                    if pair_key in checked_pairs:
+                        continue
+                        
+                    checked_pairs.add(pair_key)
+                    
+                    # Check compatibility for this pair
+                    pair_issues, pair_risk = self._check_pair_compatibility(comp1, comp2)
+                    issues.extend(pair_issues)
+                    total_risk = max(total_risk, pair_risk)  # Use maximum risk from any pair
+            
+            # Calculate overall risk considering mixture complexity
+            complexity_factor = self._calculate_complexity_factor(composition)
+            overall_risk = min(1.0, total_risk * complexity_factor)
+            
+            # Generate warnings based on risk level
+            warnings = self._generate_compatibility_warnings(overall_risk, issues)
+            
+            return {
+                'compatibility_risk': overall_risk,
+                'compatibility_issues': issues,
+                'compatibility_warnings': warnings,
+                'compatibility_summary': self._generate_compatibility_summary(overall_risk)
+            }
+        except Exception as e:
+            self.logger.error(f"Error in mixture validation: {e}")
+            return {
+                'compatibility_risk': 0.5,
+                'compatibility_issues': [f"Validation error: {str(e)}"],
+                'compatibility_warnings': ['Validation failed'],
+                'compatibility_summary': 'Error'
+            }
 
     def _check_pair_compatibility(self, comp1: Dict, comp2: Dict) -> Tuple[List[str], float]:
         """Check compatibility between two compounds"""
