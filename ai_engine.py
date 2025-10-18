@@ -1,13 +1,34 @@
 import random
 from typing import Dict, List, Any, Optional
 import numpy as np
-from ai_strategist import AIStrategist
-from computational_predictor import ComputationalPredictor
+import logging
+from utils import cached, MemoryManager
+
+# Try to import dependencies with fallbacks
+try:
+    from ai_strategist import AIStrategist
+except ImportError:
+    logging.warning("AIStrategist not available, using fallback")
+    from utils import AIStrategistFallback as AIStrategist
+
+try:
+    from computational_predictor import ComputationalPredictor
+except ImportError:
+    logging.warning("ComputationalPredictor not available, using fallback")
+    from utils import ComputationalPredictorFallback as ComputationalPredictor
 
 class CreativeAIEngine:
     def __init__(self, api_key: str):
-        self.strategist = AIStrategist(api_key)
-        self.computational_predictor = ComputationalPredictor()
+        self.api_key = api_key
+        self.logger = logging.getLogger(__name__)
+        
+        try:
+            self.strategist = AIStrategist(api_key)
+            self.computational_predictor = ComputationalPredictor()
+        except Exception as e:
+            self.logger.error(f"Failed to initialize AI components: {e}")
+            raise
+        
         self.creative_agents = self._initialize_creative_agents()
         
     def _initialize_creative_agents(self) -> Dict[str, Any]:
@@ -40,25 +61,52 @@ class CreativeAIEngine:
             }
         }
 
+    @cached
     def creative_formulation_generation(self, compounds: List[Dict], strategy: Dict, 
                                      innovation_factor: float) -> List[Dict]:
         """Generate formulations using creative AI thinking"""
-        all_formulations = []
-        
-        # Let each creative agent generate formulations
-        for agent_name, agent_info in self.creative_agents.items():
-            formulations = getattr(self, f'_{agent_name}_formulation')(
-                compounds, strategy, innovation_factor
-            )
-            all_formulations.extend(formulations)
-        
-        # Add computational enhancement predictions
-        enhanced_formulations = []
-        for formulation in all_formulations:
-            enhanced = self._enhance_with_computational_insights(formulation, strategy)
-            enhanced_formulations.append(enhanced)
-        
-        return self._select_most_promising(enhanced_formulations, strategy)
+        try:
+            if not compounds:
+                self.logger.warning("No compounds provided, using fallback formulations")
+                return self._get_fallback_formulations(strategy)
+            
+            all_formulations = []
+            
+            # Let each creative agent generate formulations
+            for agent_name, agent_info in self.creative_agents.items():
+                try:
+                    formulations = getattr(self, f'_{agent_name}_formulation')(
+                        compounds, strategy, innovation_factor
+                    )
+                    all_formulations.extend(formulations)
+                    
+                    # Memory management
+                    if MemoryManager.check_memory_limit():
+                        MemoryManager.cleanup_memory()
+                        
+                except Exception as e:
+                    self.logger.error(f"Agent {agent_name} failed: {e}")
+                    continue
+            
+            if not all_formulations:
+                self.logger.warning("All agents failed, using fallback")
+                return self._get_fallback_formulations(strategy)
+            
+            # Add computational enhancement predictions
+            enhanced_formulations = []
+            for formulation in all_formulations:
+                try:
+                    enhanced = self._enhance_with_computational_insights(formulation, strategy)
+                    enhanced_formulations.append(enhanced)
+                except Exception as e:
+                    self.logger.error(f"Enhancement failed for formulation: {e}")
+                    enhanced_formulations.append(formulation)  # Keep original
+            
+            return self._select_most_promising(enhanced_formulations, strategy)
+            
+        except Exception as e:
+            self.logger.error(f"Creative formulation generation failed: {e}")
+            return self._get_fallback_formulations(strategy)
 
     def _quantum_thinker_formulation(self, compounds: List[Dict], strategy: Dict, 
                                    innovation_factor: float) -> List[Dict]:
@@ -68,15 +116,24 @@ class CreativeAIEngine:
         # Focus on electronic properties
         electronic_compounds = [c for c in compounds if self._has_electronic_character(c)]
         
-        for _ in range(3 + int(innovation_factor * 7)):
-            # Create formulations with electronic functionality
-            num_components = random.randint(1, 4)
-            selected = random.sample(electronic_compounds, 
-                                   min(num_components, len(electronic_compounds)))
-            
-            formulation = self._create_creative_formulation(selected, strategy, 'quantum_thinker')
-            formulation['thinking'] = "Designed for optimal electronic structure and charge transport"
-            formulations.append(formulation)
+        # If no electronic compounds, use all compounds
+        if not electronic_compounds:
+            electronic_compounds = compounds
+        
+        num_formulations = 3 + int(innovation_factor * 7)
+        
+        for _ in range(num_formulations):
+            try:
+                # Create formulations with electronic functionality
+                num_components = random.randint(1, min(4, len(electronic_compounds)))
+                selected = random.sample(electronic_compounds, num_components)
+                
+                formulation = self._create_creative_formulation(selected, strategy, 'quantum_thinker')
+                formulation['thinking'] = "Designed for optimal electronic structure and charge transport"
+                formulations.append(formulation)
+            except Exception as e:
+                self.logger.warning(f"Quantum thinker formulation failed: {e}")
+                continue
         
         return formulations
 
@@ -88,17 +145,24 @@ class CreativeAIEngine:
         # Look for bio-inspired compounds
         bio_compounds = [c for c in compounds if self._has_biological_relevance(c)]
         
-        for _ in range(2 + int(innovation_factor * 5)):
-            # Create nature-inspired formulations
-            if bio_compounds:
-                selected = random.sample(bio_compounds, 
-                                       min(3, len(bio_compounds)))
-            else:
-                selected = random.sample(compounds, min(3, len(compounds)))
-            
-            formulation = self._create_creative_formulation(selected, strategy, 'biomimetic_thinker')
-            formulation['thinking'] = "Inspired by natural systems and biological materials"
-            formulations.append(formulation)
+        # If no bio compounds, use all compounds
+        if not bio_compounds:
+            bio_compounds = compounds
+        
+        num_formulations = 2 + int(innovation_factor * 5)
+        
+        for _ in range(num_formulations):
+            try:
+                # Create nature-inspired formulations
+                num_components = min(3, len(bio_compounds))
+                selected = random.sample(bio_compounds, num_components)
+                
+                formulation = self._create_creative_formulation(selected, strategy, 'biomimetic_thinker')
+                formulation['thinking'] = "Inspired by natural systems and biological materials"
+                formulations.append(formulation)
+            except Exception as e:
+                self.logger.warning(f"Biomimetic thinker formulation failed: {e}")
+                continue
         
         return formulations
 
@@ -107,25 +171,40 @@ class CreativeAIEngine:
         """Combinatorial explorer agent formulations"""
         formulations = []
         
-        # Create unconventional combinations
-        for _ in range(4 + int(innovation_factor * 8)):
-            # Mix different classes of compounds
-            organic = [c for c in compounds if self._is_organic(c)]
-            inorganic = [c for c in compounds if self._is_inorganic(c)]
-            polymeric = [c for c in compounds if self._is_polymeric(c)]
-            
-            selected = []
-            if organic: selected.append(random.choice(organic))
-            if inorganic: selected.append(random.choice(inorganic))
-            if polymeric and len(selected) < 3: 
-                selected.append(random.choice(polymeric))
-            
-            if not selected:
-                selected = random.sample(compounds, min(3, len(compounds)))
-            
-            formulation = self._create_creative_formulation(selected, strategy, 'combinatorial_thinker')
-            formulation['thinking'] = "Exploring emergent properties from unconventional combinations"
-            formulations.append(formulation)
+        num_formulations = 4 + int(innovation_factor * 8)
+        
+        for _ in range(num_formulations):
+            try:
+                # Mix different classes of compounds
+                organic = [c for c in compounds if self._is_organic(c)]
+                inorganic = [c for c in compounds if self._is_inorganic(c)]
+                polymeric = [c for c in compounds if self._is_polymeric(c)]
+                
+                selected = []
+                if organic: 
+                    selected.append(random.choice(organic))
+                if inorganic: 
+                    selected.append(random.choice(inorganic))
+                if polymeric and len(selected) < 3: 
+                    selected.append(random.choice(polymeric))
+                
+                # If we don't have enough components, add random ones
+                while len(selected) < min(3, len(compounds)):
+                    available = [c for c in compounds if c not in selected]
+                    if available:
+                        selected.append(random.choice(available))
+                    else:
+                        break
+                
+                if not selected:
+                    selected = random.sample(compounds, min(3, len(compounds)))
+                
+                formulation = self._create_creative_formulation(selected, strategy, 'combinatorial_thinker')
+                formulation['thinking'] = "Exploring emergent properties from unconventional combinations"
+                formulations.append(formulation)
+            except Exception as e:
+                self.logger.warning(f"Combinatorial thinker formulation failed: {e}")
+                continue
         
         return formulations
 
@@ -137,16 +216,23 @@ class CreativeAIEngine:
         # Focus on compounds with nanoscale potential
         nano_compounds = [c for c in compounds if self._has_nanoscale_potential(c)]
         
-        for _ in range(3 + int(innovation_factor * 6)):
-            if nano_compounds:
-                selected = random.sample(nano_compounds, 
-                                       min(4, len(nano_compounds)))
-            else:
-                selected = random.sample(compounds, min(3, len(compounds)))
-            
-            formulation = self._create_creative_formulation(selected, strategy, 'nanoscale_thinker')
-            formulation['thinking'] = "Designed for nanoscale effects and interfacial engineering"
-            formulations.append(formulation)
+        # If no nano compounds, use all compounds
+        if not nano_compounds:
+            nano_compounds = compounds
+        
+        num_formulations = 3 + int(innovation_factor * 6)
+        
+        for _ in range(num_formulations):
+            try:
+                num_components = min(4, len(nano_compounds))
+                selected = random.sample(nano_compounds, num_components)
+                
+                formulation = self._create_creative_formulation(selected, strategy, 'nanoscale_thinker')
+                formulation['thinking'] = "Designed for nanoscale effects and interfacial engineering"
+                formulations.append(formulation)
+            except Exception as e:
+                self.logger.warning(f"Nanoscale thinker formulation failed: {e}")
+                continue
         
         return formulations
 
@@ -158,16 +244,23 @@ class CreativeAIEngine:
         # Focus on energy-related compounds
         energy_compounds = [c for c in compounds if self._has_energy_relevance(c)]
         
-        for _ in range(3 + int(innovation_factor * 7)):
-            if energy_compounds:
-                selected = random.sample(energy_compounds, 
-                                       min(4, len(energy_compounds)))
-            else:
-                selected = random.sample(compounds, min(3, len(compounds)))
-            
-            formulation = self._create_creative_formulation(selected, strategy, 'energy_thinker')
-            formulation['thinking'] = "Optimized for energy conversion and storage applications"
-            formulations.append(formulation)
+        # If no energy compounds, use all compounds
+        if not energy_compounds:
+            energy_compounds = compounds
+        
+        num_formulations = 3 + int(innovation_factor * 7)
+        
+        for _ in range(num_formulations):
+            try:
+                num_components = min(4, len(energy_compounds))
+                selected = random.sample(energy_compounds, num_components)
+                
+                formulation = self._create_creative_formulation(selected, strategy, 'energy_thinker')
+                formulation['thinking'] = "Optimized for energy conversion and storage applications"
+                formulations.append(formulation)
+            except Exception as e:
+                self.logger.warning(f"Energy thinker formulation failed: {e}")
+                continue
         
         return formulations
 
@@ -219,7 +312,7 @@ class CreativeAIEngine:
             
             return formulation
         except Exception as e:
-            print(f"Error in computational enhancement: {e}")
+            self.logger.error(f"Error in computational enhancement: {e}")
             return formulation
 
     def _select_most_promising(self, formulations: List[Dict], strategy: Dict) -> List[Dict]:
@@ -244,8 +337,11 @@ class CreativeAIEngine:
         # Consider computational insights
         comp_insights = formulation.get('computational_insights', {})
         if comp_insights:
-            avg_confidence = np.mean([insight.get('confidence', 0) for insight in comp_insights.values()])
-            base_score += avg_confidence * 0.2
+            try:
+                avg_confidence = np.mean([insight.get('confidence', 0) for insight in comp_insights.values()])
+                base_score += avg_confidence * 0.2
+            except:
+                pass
         
         # Consider scientific evaluation
         sci_eval = formulation.get('scientific_evaluation', {})
@@ -360,3 +456,48 @@ class CreativeAIEngine:
                 comp['mole_ratio'] = 1.0
         
         return composition
+
+    def _get_fallback_formulations(self, strategy: Dict) -> List[Dict]:
+        """Provide basic formulations when generation fails"""
+        self.logger.info("Using fallback formulations")
+        return [{
+            'composition': [{
+                'name': 'Basic Formulation', 
+                'mass_percentage': 100.0,
+                'category': 'fallback'
+            }],
+            'agent_type': 'Fallback Agent',
+            'strategy_alignment': 0.5,
+            'confidence': 0.3,
+            'innovation_score': 0.3,
+            'computational_insights': {},
+            'scientific_evaluation': {'scientific_feasibility': 'Medium'},
+            'thinking': 'Basic fallback formulation'
+        }]
+
+# Fallback classes for when dependencies are missing
+class AIStrategistFallback:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+    
+    def think_about_challenge(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
+        return {
+            "scientific_analysis": f"Basic analysis for {material_type}",
+            "key_mechanisms": ["basic functionality"],
+            "target_compound_classes": [material_type],
+            "search_strategy": {
+                "primary_terms": [material_type],
+                "innovative_terms": []
+            }
+        }
+    
+    def evaluate_formulation_science(self, formulation: Dict, strategy: Dict) -> Dict[str, Any]:
+        return {
+            "scientific_feasibility": "Medium",
+            "key_advantages": ["Basic functionality"],
+            "potential_issues": []
+        }
+
+class ComputationalPredictorFallback:
+    def predict_advanced_properties(self, formulation: Dict, target_props: Dict) -> Dict[str, Any]:
+        return {}
