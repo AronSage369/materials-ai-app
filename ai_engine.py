@@ -331,7 +331,7 @@ class MaterialsAIEngine:
             for i, comp in enumerate(composition):
                 comp['mole_percentage'] = (mole_data[i] / total_moles) * 100
                 comp['mole_ratio'] = mole_data[i] / min(mole_data) if min(mole_data) > 0 else 1
-            else:
+        else:
             for comp in composition:
                 comp['mole_percentage'] = 100.0 / len(composition)
                 comp['mole_ratio'] = 1.0
