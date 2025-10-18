@@ -1,9 +1,12 @@
 import numpy as np
+import logging
 from typing import Dict, List, Any, Callable
 import math
+from utils import cached, MemoryManager
 
 class MixturePredictor:
     def __init__(self):
+        self.logger = logging.getLogger(__name__)
         self.mixing_rules = {
             'linear': self.linear_mixing,
             'logarithmic': self.logarithmic_mixing,
@@ -25,6 +28,7 @@ class MixturePredictor:
             'flash_point': 'weighted_average'
         }
 
+    @cached
     def predict_mixture_properties(self, formulation: Dict, 
                                  component_properties: Dict[str, float]) -> Dict[str, float]:
         """Predict mixture properties using appropriate mixing rules"""
@@ -41,10 +45,14 @@ class MixturePredictor:
             mixing_method = self.property_mixing_methods.get(prop_name, 'weighted_average')
             
             if mixing_method in self.mixing_rules:
-                mixture_value = self.mixing_rules[mixing_method](
-                    mass_fractions, [component_value] * len(composition)  # Simplified for demo
-                )
-                mixture_properties[prop_name] = mixture_value
+                try:
+                    # Create list of values for each component (simplified - same value for all)
+                    values = [component_value] * len(composition)
+                    mixture_value = self.mixing_rules[mixing_method](mass_fractions, values)
+                    mixture_properties[prop_name] = mixture_value
+                except Exception as e:
+                    self.logger.error(f"Error in {mixing_method} mixing for {prop_name}: {e}")
+                    mixture_properties[prop_name] = component_value
             else:
                 mixture_properties[prop_name] = component_value
                 
@@ -99,35 +107,45 @@ class MixturePredictor:
             
         return bp_sum / total_mass if total_mass > 0 else 100
 
+    @cached
     def predict_azeotropic_behavior(self, formulation: Dict) -> Dict[str, Any]:
         """Predict potential azeotropic behavior in mixtures"""
-        composition = formulation.get('composition', [])
-        if len(composition) < 2:
-            return {'is_azeotrope': False, 'confidence': 0.0}
+        try:
+            composition = formulation.get('composition', [])
+            if len(composition) < 2:
+                return {'is_azeotrope': False, 'confidence': 0.0}
+                
+            # Simple heuristic based on boiling point differences and polarity
+            boiling_points = [comp.get('boiling_point', 100) for comp in composition]
+            bp_range = max(boiling_points) - min(boiling_points)
             
-        # Simple heuristic based on boiling point differences and polarity
-        boiling_points = [comp.get('boiling_point', 100) for comp in composition]
-        bp_range = max(boiling_points) - min(boiling_points)
-        
-        polarity_scores = []
-        for comp in composition:
-            smiles = comp.get('smiles', '').lower()
-            polarity = 0.0
-            if 'oh' in smiles or 'cooh' in smiles:
-                polarity += 0.7
-            if 'o' in smiles and 'c=o' in smiles:
-                polarity += 0.5
-            polarity_scores.append(polarity)
+            polarity_scores = []
+            for comp in composition:
+                smiles = comp.get('smiles', '').lower()
+                polarity = 0.0
+                if 'oh' in smiles or 'cooh' in smiles:
+                    polarity += 0.7
+                if 'o' in smiles and 'c=o' in smiles:
+                    polarity += 0.5
+                polarity_scores.append(polarity)
+                
+            polarity_similarity = 1.0 - (max(polarity_scores) - min(polarity_scores)) if polarity_scores else 0.5
             
-        polarity_similarity = 1.0 - (max(polarity_scores) - min(polarity_scores))
-        
-        # Azeotrope likelihood increases with similar boiling points and polarities
-        azeotrope_prob = (1.0 - bp_range/100) * polarity_similarity
-        is_azeotrope = azeotrope_prob > 0.6
-        
-        return {
-            'is_azeotrope': is_azeotrope,
-            'confidence': azeotrope_prob,
-            'boiling_point_range': bp_range,
-            'polarity_similarity': polarity_similarity
-        }
+            # Azeotrope likelihood increases with similar boiling points and polarities
+            azeotrope_prob = (1.0 - bp_range/100) * polarity_similarity
+            is_azeotrope = azeotrope_prob > 0.6
+            
+            return {
+                'is_azeotrope': is_azeotrope,
+                'confidence': azeotrope_prob,
+                'boiling_point_range': bp_range,
+                'polarity_similarity': polarity_similarity
+            }
+        except Exception as e:
+            self.logger.error(f"Error predicting azeotropic behavior: {e}")
+            return {
+                'is_azeotrope': False,
+                'confidence': 0.0,
+                'boiling_point_range': 0,
+                'polarity_similarity': 0
+            }
