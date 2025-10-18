@@ -5,9 +5,11 @@ import aiohttp
 from typing import Dict, List, Any, Optional, Tuple
 import random
 import time
+import logging
 from dataclasses import dataclass
 import numpy as np
 import re
+from utils import cached, CacheManager, MemoryManager
 
 @dataclass
 class Compound:
@@ -23,8 +25,8 @@ class Compound:
 class PubChemManager:
     def __init__(self):
         self.session = None
-        self.search_cache = {}
-        self.compound_cache = {}
+        self.logger = logging.getLogger(__name__)
+        self.cache = CacheManager()
         
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -34,9 +36,10 @@ class PubChemManager:
         if self.session:
             await self.session.close()
 
+    @cached
     def find_compounds(self, strategy: Dict, material_type: str) -> List[Dict]:
         """Find compounds using comprehensive PubChem search across ALL chemical classes"""
-        print(f"🔍 Comprehensive PubChem search for {material_type}")
+        self.logger.info(f"🔍 Comprehensive PubChem search for {material_type}")
         
         try:
             # Generate MASSIVE search terms covering all chemical classes
@@ -67,7 +70,7 @@ class PubChemManager:
             
             # If still few results, use enhanced fallback
             if len(all_compounds) < 20:
-                print("⚠️ Few compounds found, expanding search...")
+                self.logger.warning("Few compounds found, expanding search...")
                 expanded_compounds = self._expanded_fallback_search(material_type)
                 all_compounds.extend(expanded_compounds)
             
@@ -78,11 +81,11 @@ class PubChemManager:
             # Enhanced scoring and categorization
             scored_compounds = self.enhanced_score_and_categorize(filtered_compounds, strategy)
             
-            print(f"✅ Found {len(scored_compounds)} diverse compounds from {len(unique_compounds)} total")
+            self.logger.info(f"✅ Found {len(scored_compounds)} diverse compounds from {len(unique_compounds)} total")
             return scored_compounds[:100]  # Return top 100
             
         except Exception as e:
-            print(f"❌ Error in comprehensive search: {e}")
+            self.logger.error(f"❌ Error in comprehensive search: {e}")
             return self._get_enhanced_fallback_compounds(material_type)
 
     def _generate_comprehensive_search_terms(self, strategy: Dict, material_type: str) -> List[str]:
@@ -218,7 +221,7 @@ class PubChemManager:
     def _get_application_terms(self, strategy: Dict) -> List[str]:
         """Get application-specific terms from strategy"""
         terms = []
-        primary_obj = strategy.get('primary_objective', '').lower()
+        scientific_analysis = strategy.get('scientific_analysis', '').lower()
         
         application_keywords = {
             'electronics': ['dielectric', 'semiconductor', 'electronic', 'conformal', 'encapsulant'],
@@ -232,7 +235,7 @@ class PubChemManager:
         }
         
         for app, keywords in application_keywords.items():
-            if any(keyword in primary_obj for keyword in [app] + keywords):
+            if any(keyword in scientific_analysis for keyword in [app] + keywords):
                 terms.extend(keywords)
         
         return terms
@@ -293,7 +296,7 @@ class PubChemManager:
         
         for category in categories[:10]:  # Limit to 10 categories
             try:
-                print(f"🔍 Searching category: {category}")
+                self.logger.info(f"🔍 Searching category: {category}")
                 results = pcp.get_compounds(category, 'name', listkey_count=20)
                 
                 for compound in results:
@@ -304,7 +307,7 @@ class PubChemManager:
                 time.sleep(0.3)
                 
             except Exception as e:
-                print(f"Category search failed for {category}: {e}")
+                self.logger.error(f"Category search failed for {category}: {e}")
                 continue
         
         return compounds
@@ -357,7 +360,7 @@ class PubChemManager:
                 time.sleep(0.3)
                 
             except Exception as e:
-                print(f"Property search failed for {term}: {e}")
+                self.logger.error(f"Property search failed for {term}: {e}")
                 continue
         
         return compounds
@@ -401,7 +404,7 @@ class PubChemManager:
                 time.sleep(0.3)
                 
             except Exception as e:
-                print(f"Class search failed for {compound_class}: {e}")
+                self.logger.error(f"Class search failed for {compound_class}: {e}")
                 continue
         
         return compounds
@@ -447,7 +450,7 @@ class PubChemManager:
                 if not isinstance(term, str):
                     continue
                     
-                print(f"🔍 Searching: {term}")
+                self.logger.info(f"🔍 Searching: {term}")
                 compounds = pcp.get_compounds(term, 'name', listkey_count=10)
                 
                 for compound in compounds:
@@ -458,7 +461,7 @@ class PubChemManager:
                 time.sleep(0.4)
                 
             except Exception as e:
-                print(f"Search failed for '{term}': {e}")
+                self.logger.error(f"Search failed for '{term}': {e}")
                 continue
         
         # Remove duplicates
@@ -482,7 +485,7 @@ class PubChemManager:
                 time.sleep(0.3)
                 
             except Exception as e:
-                print(f"Fallback search failed for {term}: {e}")
+                self.logger.error(f"Fallback search failed for {term}: {e}")
                 continue
         
         return compounds
@@ -522,7 +525,7 @@ class PubChemManager:
             
             return compound_data
         except Exception as e:
-            print(f"Error extracting data for compound: {e}")
+            self.logger.error(f"Error extracting data for compound: {e}")
             return None
 
     def _minimal_filter_compound(self, compound: Dict, material_type: str) -> bool:
@@ -540,7 +543,7 @@ class PubChemManager:
             return 10 <= mw <= 50000  # Allow very small to very large molecules
             
         except Exception as e:
-            print(f"Error in minimal filtering: {e}")
+            self.logger.error(f"Error in minimal filtering: {e}")
             return False
 
     def _remove_duplicate_compounds(self, compounds: List[Dict]) -> List[Dict]:
@@ -550,14 +553,15 @@ class PubChemManager:
             unique_compounds = []
             
             for compound in compounds:
-                if compound['cid'] not in seen_cids:
-                    seen_cids.add(compound['cid'])
+                cid = compound.get('cid')
+                if cid and cid not in seen_cids:
+                    seen_cids.add(cid)
                     unique_compounds.append(compound)
                     
             return unique_compounds
             
         except Exception as e:
-            print(f"Error removing duplicates: {e}")
+            self.logger.error(f"Error removing duplicates: {e}")
             return compounds
 
     def enhanced_score_and_categorize(self, compounds: List[Dict], strategy: Dict) -> List[Dict]:
@@ -599,7 +603,7 @@ class PubChemManager:
             return self._ensure_diversity(scored_compounds)
             
         except Exception as e:
-            print(f"Error in enhanced scoring: {e}")
+            self.logger.error(f"Error in enhanced scoring: {e}")
             return compounds
 
     def _score_molecular_properties(self, compound: Dict, target_props: Dict, strategy: Dict) -> float:
@@ -632,7 +636,7 @@ class PubChemManager:
             return min(score, 1.0)
             
         except Exception as e:
-            print(f"Error in molecular property scoring: {e}")
+            self.logger.error(f"Error in molecular property scoring: {e}")
             return 0.5
 
     def _score_chemical_class(self, compound: Dict, target_props: Dict, strategy: Dict) -> float:
@@ -657,7 +661,7 @@ class PubChemManager:
             return score
             
         except Exception as e:
-            print(f"Error in chemical class scoring: {e}")
+            self.logger.error(f"Error in chemical class scoring: {e}")
             return 0.5
 
     def _score_functional_groups(self, compound: Dict, target_props: Dict, strategy: Dict) -> float:
@@ -678,32 +682,32 @@ class PubChemManager:
             return min(score, 1.0)
             
         except Exception as e:
-            print(f"Error in functional group scoring: {e}")
+            self.logger.error(f"Error in functional group scoring: {e}")
             return 0.5
 
     def _score_application_fit(self, compound: Dict, target_props: Dict, strategy: Dict) -> float:
         """Score based on application fit"""
         try:
-            primary_obj = strategy.get('primary_objective', '').lower()
+            scientific_analysis = strategy.get('scientific_analysis', '').lower()
             name = compound.get('name', '').lower()
             
             score = 0.5
             
             # Application-specific scoring
-            if 'electronic' in primary_obj:
+            if 'electronic' in scientific_analysis:
                 if any(keyword in name for keyword in ['dielectric', 'insulating', 'semiconductor']):
                     score = 0.8
-            elif 'medical' in primary_obj:
+            elif 'medical' in scientific_analysis:
                 if any(keyword in name for keyword in ['biocompatible', 'medical', 'pharmaceutical']):
                     score = 0.8
-            elif 'energy' in primary_obj:
+            elif 'energy' in scientific_analysis:
                 if any(keyword in name for keyword in ['battery', 'fuel cell', 'solar', 'energy']):
                     score = 0.8
             
             return score
             
         except Exception as e:
-            print(f"Error in application fit scoring: {e}")
+            self.logger.error(f"Error in application fit scoring: {e}")
             return 0.5
 
     def _enhanced_categorization(self, compound: Dict, strategy: Dict) -> str:
@@ -726,7 +730,7 @@ class PubChemManager:
                 return 'general'
                 
         except Exception as e:
-            print(f"Error in enhanced categorization: {e}")
+            self.logger.error(f"Error in enhanced categorization: {e}")
             return 'general'
 
     def _ensure_diversity(self, compounds: List[Dict]) -> List[Dict]:
@@ -762,7 +766,7 @@ class PubChemManager:
             return diverse_compounds
             
         except Exception as e:
-            print(f"Error ensuring diversity: {e}")
+            self.logger.error(f"Error ensuring diversity: {e}")
             return compounds[:50]
 
     def _classify_compound(self, compound: Dict) -> str:
@@ -797,7 +801,7 @@ class PubChemManager:
                 return 'other'
                 
         except Exception as e:
-            print(f"Error in compound classification: {e}")
+            self.logger.error(f"Error in compound classification: {e}")
             return 'unknown'
 
     def _get_enhanced_fallback_compounds(self, material_type: str) -> List[Dict]:
@@ -855,5 +859,5 @@ class PubChemManager:
             return compounds
             
         except Exception as e:
-            print(f"Error getting enhanced fallback compounds: {e}")
+            self.logger.error(f"Error getting enhanced fallback compounds: {e}")
             return []
