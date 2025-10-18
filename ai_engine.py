@@ -49,7 +49,7 @@ class MaterialsAIEngine:
             },
             'balanced': {
                 'name': 'Balanced Agent', 
-                'description': 'Seeks optimal trade-offs across all criteria',
+                'description': 'Seek optimal trade-offs across all criteria',
                 'max_components': 4,
                 'risk_tolerance': 'medium'
             }
@@ -60,7 +60,7 @@ class MaterialsAIEngine:
         try:
             genai.configure(api_key=api_key)
             # Try multiple model versions for robustness
-            model_versions = ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro']
+            model_versions = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-flash']
             
             for model_version in model_versions:
                 try:
@@ -400,38 +400,38 @@ class MaterialsAIEngine:
         return approved_formulations
 
     def calculate_property_score(self, formulation: Dict, strategy: Dict) -> float:
-    """Calculate how well formulation matches target properties"""
-    total_score = 0
-    total_weight = 0
-    
-    target_props = strategy.get('target_properties', {})
-    predicted_props = formulation.get('predicted_properties', {})
-    
-    for prop_name, criteria in target_props.items():
-        if prop_name not in predicted_props:
-            continue
+        """Calculate how well formulation matches target properties"""
+        total_score = 0
+        total_weight = 0
+        
+        target_props = strategy.get('target_properties', {})
+        predicted_props = formulation.get('predicted_properties', {})
+        
+        for prop_name, criteria in target_props.items():
+            if prop_name not in predicted_props:
+                continue
+                
+            # Skip if predicted value is not numeric
+            predicted_value = predicted_props[prop_name]
+            if not isinstance(predicted_value, (int, float)):
+                continue
+                
+            importance = criteria.get('importance', 'medium')
+            weight = {'high': 3, 'medium': 2, 'low': 1}.get(importance, 1)
             
-        # Skip if predicted value is not numeric
-        predicted_value = predicted_props[prop_name]
-        if not isinstance(predicted_value, (int, float)):
-            continue
+            target_value = criteria.get('target')
+            min_value = criteria.get('min')
+            max_value = criteria.get('max')
             
-        importance = criteria.get('importance', 'medium')
-        weight = {'high': 3, 'medium': 2, 'low': 1}.get(importance, 1)
+            # Calculate individual property score
+            prop_score = self._calculate_individual_property_score(
+                predicted_value, target_value, min_value, max_value
+            )
+            
+            total_score += prop_score * weight
+            total_weight += weight
         
-        target_value = criteria.get('target')
-        min_value = criteria.get('min')
-        max_value = criteria.get('max')
-        
-        # Calculate individual property score
-        prop_score = self._calculate_individual_property_score(
-            predicted_value, target_value, min_value, max_value
-        )
-        
-        total_score += prop_score * weight
-        total_weight += weight
-    
-    return total_score / total_weight if total_weight > 0 else 0
+        return total_score / total_weight if total_weight > 0 else 0
 
     def _calculate_individual_property_score(self, predicted: float, target: float, 
                                            min_val: float, max_val: float) -> float:
@@ -477,67 +477,67 @@ class MaterialsAIEngine:
         return reasoning
 
     def _identify_strengths(self, formulation: Dict, strategy: Dict) -> List[str]:
-    """Identify formulation strengths"""
-    strengths = []
-    props = formulation.get('predicted_properties', {})
-    
-    # Check key target properties
-    target_props = strategy.get('target_properties', {})
-    for prop, criteria in target_props.items():
-        if prop in props:
-            importance = criteria.get('importance', 'medium')
-            
-            # Safely get and compare property values
-            prop_value = props[prop]
-            min_val = criteria.get('min', 0)
-            
-            # Ensure both values are numeric before comparison
-            if (isinstance(prop_value, (int, float)) and 
-                isinstance(min_val, (int, float)) and
-                importance == 'high' and 
-                prop_value >= min_val):
-                strengths.append(f"Meets {prop} requirements")
-    
-    # Composition-based strengths
-    if len(formulation['composition']) == 1:
-        strengths.append("Simple single-component system")
-    elif len(formulation['composition']) <= 3:
-        strengths.append("Reasonable complexity for implementation")
-    
-    if formulation.get('compatibility_risk', 1) < 0.3:
-        strengths.append("Good chemical compatibility")
+        """Identify formulation strengths"""
+        strengths = []
+        props = formulation.get('predicted_properties', {})
         
-    return strengths[:3]  # Return top 3 strengths
+        # Check key target properties
+        target_props = strategy.get('target_properties', {})
+        for prop, criteria in target_props.items():
+            if prop in props:
+                importance = criteria.get('importance', 'medium')
+                
+                # Safely get and compare property values
+                prop_value = props[prop]
+                min_val = criteria.get('min', 0)
+                
+                # Ensure both values are numeric before comparison
+                if (isinstance(prop_value, (int, float)) and 
+                    isinstance(min_val, (int, float)) and
+                    importance == 'high' and 
+                    prop_value >= min_val):
+                    strengths.append(f"Meets {prop} requirements")
+        
+        # Composition-based strengths
+        if len(formulation['composition']) == 1:
+            strengths.append("Simple single-component system")
+        elif len(formulation['composition']) <= 3:
+            strengths.append("Reasonable complexity for implementation")
+        
+        if formulation.get('compatibility_risk', 1) < 0.3:
+            strengths.append("Good chemical compatibility")
+            
+        return strengths[:3]  # Return top 3 strengths
 
     def _identify_limitations(self, formulation: Dict, strategy: Dict) -> List[str]:
-    """Identify formulation limitations"""
-    limitations = []
-    props = formulation.get('predicted_properties', {})
-    
-    # Check property limitations
-    target_props = strategy.get('target_properties', {})
-    for prop, criteria in target_props.items():
-        if prop in props:
-            min_val = criteria.get('min')
-            max_val = criteria.get('max')
-            predicted = props[prop]
-            
-            # Only compare if we have numeric values
-            if not isinstance(predicted, (int, float)):
-                continue
-                
-            if min_val is not None and isinstance(min_val, (int, float)):
-                if predicted < min_val * 1.1:  # Close to minimum
-                    limitations.append(f"Marginal {prop} performance")
-            if max_val is not None and isinstance(max_val, (int, float)):
-                if predicted > max_val * 0.9:  # Close to maximum
-                    limitations.append(f"{prop} near upper limit")
-    
-    # Composition-based limitations
-    if len(formulation['composition']) > 4:
-        limitations.append("Complex multi-component system")
-    
-    if formulation.get('compatibility_risk', 0) > 0.7:
-        limitations.append("Potential compatibility concerns")
+        """Identify formulation limitations"""
+        limitations = []
+        props = formulation.get('predicted_properties', {})
         
-    return limitations[:3]  # Return top 3 limitations
+        # Check property limitations
+        target_props = strategy.get('target_properties', {})
+        for prop, criteria in target_props.items():
+            if prop in props:
+                min_val = criteria.get('min')
+                max_val = criteria.get('max')
+                predicted = props[prop]
+                
+                # Only compare if we have numeric values
+                if not isinstance(predicted, (int, float)):
+                    continue
+                    
+                if min_val is not None and isinstance(min_val, (int, float)):
+                    if predicted < min_val * 1.1:  # Close to minimum
+                        limitations.append(f"Marginal {prop} performance")
+                if max_val is not None and isinstance(max_val, (int, float)):
+                    if predicted > max_val * 0.9:  # Close to maximum
+                        limitations.append(f"{prop} near upper limit")
+        
+        # Composition-based limitations
+        if len(formulation['composition']) > 4:
+            limitations.append("Complex multi-component system")
+        
+        if formulation.get('compatibility_risk', 0) > 0.7:
+            limitations.append("Potential compatibility concerns")
+            
+        return limitations[:3]  # Return top 3 limitations
