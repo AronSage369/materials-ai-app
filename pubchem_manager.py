@@ -1,4 +1,4 @@
-# pubchem_manager.py - FIXED VERSION
+# pubchem_manager.py - REWRITTEN FOR EFFICIENCY AND RELIABILITY
 import pubchempy as pcp
 import pandas as pd
 import numpy as np
@@ -8,54 +8,58 @@ import streamlit as st
 
 class PubChemManager:
     def __init__(self):
-        self.search_cache = {}
-        self.property_cache = {}
-        self.rate_limit_delay = 0.3
-        
-        # Enhanced known coolant compounds with better properties
-        self.known_coolants = {
-            'silicones': [
-                6390,   # Hexamethyldisiloxane - good thermal conductivity
-                11403,  # Octamethyltrisiloxane - moderate viscosity
-                99649,  # Decamethylcyclopentasiloxane - high flash point
-                24755,  # Polydimethylsiloxane - excellent dielectric
+        """
+        Initializes the PubChemManager with a small, reliable internal database.
+        This database acts as a fallback if live PubChem searches fail.
+        """
+        self.known_compounds_db = {
+            'Coolant/Lubricant': [
+                {'cid': 24764, 'iupac_name': 'Hexamethyldisiloxane', 'molecular_formula': 'C6H18OSi2', 'molecular_weight': '162.4'},
+                {'cid': 24705, 'iupac_name': 'Octamethyltrisiloxane', 'molecular_formula': 'C8H24O2Si3', 'molecular_weight': '236.5'},
+                {'cid': 1030, 'iupac_name': 'Propylene Glycol', 'molecular_formula': 'C3H8O2', 'molecular_weight': '76.1'},
+                {'cid': 174, 'iupac_name': 'Ethylene Glycol', 'molecular_formula': 'C2H6O2', 'molecular_weight': '62.1'}
             ],
-            'esters': [
-                31261,  # Dioctyl sebacate - good viscosity
-                8186,   # Dibutyl sebacate - low viscosity
-                31255,  # Diethyl sebacate - excellent biodegradability
-            ],
-            'glycols': [
-                174,    # Ethylene glycol - high specific heat
-                1030,   # Propylene glycol - good thermal properties
-                12139,  # Polyethylene glycol - adjustable properties
-            ],
-            'hydrocarbons': [
-                12355,  # Mineral oil - good dielectric
-                8123,   # White oil - high purity
-                32555,  # Paraffin oil - stable
+            'Adsorbent': [
+                {'cid': 24844, 'iupac_name': 'Zeolite Y', 'molecular_formula': 'Na56Al56Si136O384', 'molecular_weight': '13000'},
+                {'cid': 5462310, 'iupac_name': 'Activated Carbon', 'molecular_formula': 'C', 'molecular_weight': '12.0'},
+                {'cid': 10978189, 'iupac_name': 'MIL-53(Al)', 'molecular_formula': 'C8H5AlO5', 'molecular_weight': '208.1'}
             ]
         }
 
     def find_compounds(self, strategy: Dict, max_compounds: int, search_depth: str) -> Dict[str, Any]:
+        """
+        Efficiently finds and scores compounds in a single pass.
+        1. Generates effective search terms by blending AI and expert knowledge.
+        2. Performs ONE bulk search on PubChem to create a candidate pool.
+        3. Falls back to a reliable internal database if the live search fails.
+        4. Scores all found compounds in-memory to identify specialists and balanced performers.
+        """
         search_params = self._get_search_parameters(search_depth, max_compounds)
+        material_class = strategy.get('material_class', 'coolant')
         
-        search_terms = strategy.get('search_strategy', {}).get('search_terms', [])
+        # Step 1: Generate a high-quality, reliable list of search terms
+        search_terms = self._generate_effective_search_terms(material_class, strategy)
+        st.info(f"🔍 Searching PubChem with robust terms: {', '.join(search_terms[:4])}...")
         
-        if not search_terms:
-            search_terms = self._generate_effective_search_terms(strategy['material_class'])
+        # Step 2: Perform a single, efficient bulk search for all candidate compounds
+        all_candidates = self._search_compounds(search_terms, search_params)
         
-        st.info(f"🔍 Searching with terms: {', '.join(search_terms[:5])}...")
+        # Step 3: If the live search yields no results, use the internal fallback database
+        if not all_candidates:
+            st.warning("⚠️ No compounds found in primary PubChem search. Using internal database as fallback...")
+            all_candidates = self._use_known_compounds_fallback(material_class)
+            if not all_candidates:
+                st.error("❌ Critical Error: No compounds found in PubChem or the internal fallback database.")
+                return {'specialists': {}, 'balanced': [], 'search_metrics': {}}
+
+        st.success(f"✅ Found {len(all_candidates)} potential candidate compounds for analysis.")
         
-        # Try primary search
-        specialists = self._find_property_specialists(strategy, search_terms, search_params)
-        balanced_candidates = self._find_balanced_compounds(strategy, search_terms, search_params)
+        # Step 4: Score and categorize the entire pool of candidates in-memory
+        st.write("🔬 Scoring and categorizing all candidates...")
+        specialists = self._find_property_specialists(strategy, all_candidates)
+        balanced_candidates = self._find_balanced_compounds(strategy, all_candidates)
         
-        # If no results, use fallback known compounds
         total_found = sum(len(s) for s in specialists.values()) + len(balanced_candidates)
-        if total_found == 0:
-            st.warning("⚠️ No compounds found in search. Using known coolant database...")
-            return self._use_known_compounds_fallback(strategy, max_compounds)
         
         return {
             'specialists': specialists,
@@ -66,330 +70,147 @@ class PubChemManager:
             }
         }
 
-    def _generate_effective_search_terms(self, material_class: str) -> List[str]:
-        """Generate search terms that actually work in PubChem"""
-        if material_class == 'coolant':
-            return [
-                # Specific compounds that exist in PubChem
-                'hexamethyldisiloxane', 'octamethyltrisiloxane', 'decamethylcyclopentasiloxane',
-                'polydimethylsiloxane', 'dimethyl siloxane',
-                'mineral oil', 'paraffin oil', 'white oil',
-                'ethylene glycol', 'propylene glycol', 'polyethylene glycol',
-                'dioctyl sebacate', 'dibutyl sebacate', 'diethyl sebacate',
-                'polyalphaolefin', 'alkylbenzene', 'synthetic oil',
-                'ester oil', 'polyol ester', 'pentaerythritol ester',
-                'silicone oil', 'fluorocarbon', 'perfluoropolyether'
-            ]
-        else:
-            return ['organic compound', 'polymer', 'industrial chemical']
-
-    def _use_known_compounds_fallback(self, strategy: Dict, max_compounds: int) -> Dict[str, Any]:
-        """Use known compounds when searches fail"""
-        specialists = {}
-        balanced_candidates = []
+    def _generate_effective_search_terms(self, material_class: str, strategy: Dict) -> List[str]:
+        """Generates a list of reliable search terms by combining AI suggestions with a predefined expert list."""
+        base_terms = strategy.get('search_strategy', {}).get('search_terms', [])
         
-        # Get all known coolant CIDs
-        all_cids = []
-        for category, cids in self.known_coolants.items():
-            all_cids.extend(cids)
-        
-        # Fetch compounds and score them
-        scored_compounds = []
-        for cid in all_cids[:max_compounds]:
-            try:
-                compound = pcp.Compound.from_cid(cid)
-                if self._is_valid_compound(compound):
-                    score = self._calculate_overall_score(compound, strategy)
-                    scored_compounds.append((compound, score))
-                    time.sleep(0.2)  # Rate limiting
-            except Exception as e:
-                st.write(f"   ⚠️ Could not fetch CID {cid}: {e}")
-                continue
-        
-        # Sort by score
-        scored_compounds.sort(key=lambda x: x[1], reverse=True)
-        balanced_candidates = scored_compounds
-        
-        # Create specialists from top compounds - FIXED: Check if specialists is dict
-        target_properties = strategy.get('target_properties', {})
-        if isinstance(target_properties, dict):  # ADDED CHECK
-            for prop_name in target_properties.keys():
-                # Just use top balanced candidates as specialists for now
-                specialists[prop_name] = [c[0] for c in scored_compounds[:3]]
-        else:
-            st.warning("⚠️ Target properties is not a dictionary, using default specialists")
-            # Create default specialists if target_properties is not a dict
-            for prop_name in ['thermal_conductivity', 'viscosity', 'flash_point']:
-                specialists[prop_name] = [c[0] for c in scored_compounds[:2]]
-        
-        st.success(f"✅ Found {len(scored_compounds)} known coolant compounds")
-        
-        return {
-            'specialists': specialists,
-            'balanced': balanced_candidates,
-            'search_metrics': {
-                'terms_searched': 0,
-                'total_compounds_found': len(scored_compounds),
-                'fallback_used': True
-            }
+        # Add predefined reliable terms for the material class to improve search success
+        expert_terms = {
+            'coolant': ["siloxane", "polyalphaolefin", "synthetic ester", "propylene glycol", "mineral oil"],
+            'adsorbent': ["zeolite", "activated carbon", "metal-organic framework", "silica gel", "porous polymer"]
         }
+        base_terms.extend(expert_terms.get(material_class, []))
+        
+        # Return a unique list of terms
+        return list(dict.fromkeys(base_terms))
+
+    def _use_known_compounds_fallback(self, material_class: str) -> List[Any]:
+        """
+        Uses a small internal DB as a fallback, creating mock PubChemPy objects
+        to ensure compatibility with the rest of the analysis pipeline.
+        """
+        material_type_map = {
+            'coolant': 'Coolant/Lubricant',
+            'adsorbent': 'Adsorbent'
+        }
+        key = material_type_map.get(material_class, 'Coolant/Lubricant')
+        compounds_data = self.known_compounds_db.get(key, [])
+        
+        # Create mock objects that mimic the structure of real pubchempy.Compound objects
+        mock_compounds = [type('Compound', (object,), data)() for data in compounds_data]
+        return mock_compounds
 
     def _get_search_parameters(self, search_depth: str, max_compounds: int) -> Dict:
-        params = {
-            "Quick Scan": {'compounds_per_term': 8, 'max_terms': 6, 'timeout': 30},
-            "Standard Analysis": {'compounds_per_term': 12, 'max_terms': 8, 'timeout': 60},
-            "Comprehensive Search": {'compounds_per_term': 15, 'max_terms': 10, 'timeout': 120}
-        }
-        
-        base_params = params.get(search_depth, params["Standard Analysis"])
-        base_params['max_compounds'] = max_compounds
-        return base_params
+        """Configures search parameters based on user-selected depth."""
+        params = {"Quick Scan": 5, "Standard Analysis": 10, "Comprehensive Search": 20}
+        return {'max_results_per_term': params.get(search_depth, 10), 'max_compounds': max_compounds}
 
-    def _find_property_specialists(self, strategy: Dict, search_terms: List[str], params: Dict) -> Dict[str, List]:
+    def _find_property_specialists(self, strategy: Dict, candidates: List) -> Dict[str, List]:
+        """Efficiently finds specialist compounds from a pre-fetched list of candidates."""
         specialists = {}
         target_properties = strategy.get('target_properties', {})
         
-        # FIX: Check if target_properties is a dictionary
         if not isinstance(target_properties, dict):
-            st.warning("⚠️ Target properties is not a dictionary, using default properties")
-            target_properties = {
-                'thermal_conductivity': {'min': 0.1, 'weight': 0.3},
-                'viscosity': {'max': 50, 'weight': 0.2},
-                'flash_point': {'min': 150, 'weight': 0.2}
-            }
+            st.warning("⚠️ Target properties from AI were not a dictionary. Cannot find specialists.")
+            return {}
         
         for prop_name, criteria in target_properties.items():
-            st.write(f"🔎 Finding {prop_name} specialists...")
-            
-            # Use all search terms, not just property-specific ones
-            candidates = self._search_compounds(search_terms, params)
-            
             scored_candidates = []
             for compound in candidates:
                 score = self._score_compound_for_property(compound, prop_name, criteria)
-                if score > 0.2:  # Lower threshold
+                if score > 0.6:  # Set a higher threshold for a compound to be considered a "specialist"
                     scored_candidates.append((compound, score))
             
             scored_candidates.sort(key=lambda x: x[1], reverse=True)
-            specialists[prop_name] = [c[0] for c in scored_candidates[:3]]  # Top 3 specialists
+            specialists[prop_name] = [c[0] for c in scored_candidates[:5]]  # Return the top 5 specialists
         
         return specialists
 
-    def _find_balanced_compounds(self, strategy: Dict, search_terms: List[str], params: Dict) -> List:
-        st.write("🎯 Finding balanced performers...")
-        candidates = self._search_compounds(search_terms, params)
-        
+    def _find_balanced_compounds(self, strategy: Dict, candidates: List) -> List:
+        """Efficiently finds balanced performers from a pre-fetched list of candidates."""
         scored_candidates = []
         for compound in candidates:
             overall_score = self._calculate_overall_score(compound, strategy)
-            if overall_score > 0.3:  # Lower threshold
+            if overall_score > 0.5: # Threshold to be considered a viable balanced performer
                 scored_candidates.append((compound, overall_score))
         
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
-        return scored_candidates[:15]  # Return more candidates
+        return scored_candidates[:50] # Return up to 50 top balanced candidates for formulation
 
     def _search_compounds(self, search_terms: List[str], params: Dict) -> List:
+        """Performs a single, efficient bulk search across all terms."""
         all_compounds = []
-        terms_searched = 0
+        cids_seen = set()
         
-        for term in search_terms[:params['max_terms']]:
+        for term in search_terms:
             try:
-                cache_key = f"{term}_{params['compounds_per_term']}"
-                if cache_key in self.search_cache:
-                    compounds = self.search_cache[cache_key]
-                else:
-                    # Try different search types
-                    compounds = []
-                    
-                    # First try name search
-                    try:
-                        compounds = pcp.get_compounds(term, 'name', listkey_count=params['compounds_per_term'])
-                    except:
-                        pass
-                    
-                    # If no results, try synonym search
-                    if not compounds:
-                        try:
-                            compounds = pcp.get_compounds(term, 'synonym', listkey_count=params['compounds_per_term'])
-                        except:
-                            pass
-                    
-                    self.search_cache[cache_key] = compounds
-                    time.sleep(self.rate_limit_delay)
-                
-                valid_compounds = []
-                for compound in compounds:
-                    if self._is_valid_compound(compound):
-                        valid_compounds.append(compound)
-                
-                all_compounds.extend(valid_compounds)
-                terms_searched += 1
-                
-                if valid_compounds:
-                    st.write(f"   ✅ '{term}': found {len(valid_compounds)} compounds")
-                else:
-                    st.write(f"   ❌ '{term}': no compounds found")
-                
+                results = pcp.get_compounds(term, 'name', listkey_count=params['max_results_per_term'])
+                for compound in results:
+                    if self._is_valid_compound(compound) and compound.cid not in cids_seen:
+                        all_compounds.append(compound)
+                        cids_seen.add(compound.cid)
+                time.sleep(0.1) # Be respectful to the PubChem API
                 if len(all_compounds) >= params['max_compounds']:
                     break
-                    
-            except Exception as e:
-                st.write(f"   ⚠️ '{term}': search error")
-                continue
+            except Exception:
+                continue # Gracefully ignore errors for individual search terms
         
-        # Remove duplicates by CID
-        unique_compounds = []
-        seen_cids = set()
-        
-        for compound in all_compounds:
-            if compound.cid not in seen_cids:
-                unique_compounds.append(compound)
-                seen_cids.add(compound.cid)
-        
-        return unique_compounds[:params['max_compounds']]
+        return all_compounds[:params['max_compounds']]
 
     def _is_valid_compound(self, compound) -> bool:
-        """More lenient validation for coolants"""
-        if not compound.molecular_weight:
-            return False
-        
-        # Wider range for coolants
-        if compound.molecular_weight < 40 or compound.molecular_weight > 3000:
-            return False
-        
-        formula = getattr(compound, 'molecular_formula', '')
-        if not formula:
-            return False
-        
-        # Allow some inorganic coolants
-        if 'C' not in formula and 'Si' not in formula:
-            return False
-        
-        return True
+        """Performs basic validation on a compound object to ensure it has the necessary data."""
+        return (hasattr(compound, 'cid') and compound.cid is not None and
+                hasattr(compound, 'molecular_weight') and compound.molecular_weight is not None)
 
     def _score_compound_for_property(self, compound, property_name: str, criteria: Dict) -> float:
-        score = 0.0
-        
-        if property_name == 'thermal_conductivity':
-            if compound.molecular_weight:
-                # Silicones and esters generally have better thermal conductivity
-                name_lower = str(compound.iupac_name).lower() if compound.iupac_name else ""
-                
-                if any(term in name_lower for term in ['siloxane', 'silicone']):
-                    score = 0.8
-                elif any(term in name_lower for term in ['ester', 'glycol']):
-                    score = 0.7
-                elif any(term in name_lower for term in ['oil', 'alkane']):
-                    score = 0.6
-                else:
-                    score = 0.5
-        
-        elif property_name == 'viscosity':
-            if compound.molecular_weight:
-                # Lower MW generally means lower viscosity
-                if compound.molecular_weight < 300:
-                    score = 0.9
-                elif compound.molecular_weight < 500:
-                    score = 0.7
-                elif compound.molecular_weight < 800:
-                    score = 0.5
-                else:
-                    score = 0.3
-        
-        elif property_name == 'flash_point':
-            if compound.molecular_weight:
-                # Higher MW generally means higher flash point
-                if compound.molecular_weight > 400:
-                    score = 0.9
-                elif compound.molecular_weight > 250:
-                    score = 0.7
-                elif compound.molecular_weight > 150:
-                    score = 0.5
-                else:
-                    score = 0.3
-        
-        elif property_name == 'specific_heat':
-            # Oxygenated compounds often have higher specific heat
-            formula = getattr(compound, 'molecular_formula', '')
-            name_lower = str(compound.iupac_name).lower() if compound.iupac_name else ""
+        """
+        Generic scoring based on heuristics if no real data is available.
+        This is a placeholder for a more advanced machine learning model.
+        """
+        try:
+            mw = float(compound.molecular_weight)
+            if mw > 1000: return 0.3 # Penalize very large molecules
             
-            if 'O' in formula and formula.count('O') >= 2:
-                score = 0.8
-            elif any(term in name_lower for term in ['glycol', 'alcohol']):
-                score = 0.9
-            elif any(term in name_lower for term in ['ester', 'ether']):
-                score = 0.7
-            else:
-                score = 0.5
-        
-        elif property_name == 'dielectric_strength':
-            # Non-polar compounds generally have better dielectric strength
-            formula = getattr(compound, 'molecular_formula', '')
-            name_lower = str(compound.iupac_name).lower() if compound.iupac_name else ""
+            # Simple heuristic scoring based on property name and molecular weight
+            if any(p in property_name for p in ['conductivity', 'heat']):
+                return max(0.2, 1 - (abs(mw - 250) / 500)) # Optimal around 250 g/mol
+            if 'viscosity' in property_name:
+                return max(0.2, (mw / 400))
+            if 'flash_point' in property_name:
+                 return max(0.2, (mw / 500))
+            if 'surface_area' in property_name: # For adsorbents
+                 return max(0.2, 1 - (abs(mw - 400) / 800))
             
-            if 'O' not in formula and 'N' not in formula:  # Hydrocarbons
-                score = 0.9
-            elif any(term in name_lower for term in ['siloxane', 'silicone']):
-                score = 0.8
-            else:
-                score = 0.6
-        
-        else:
-            # Default scoring for other properties
-            score = 0.5
-        
-        return min(1.0, score)
+            return 0.5 # Default score for unknown properties
+        except (ValueError, TypeError):
+            return 0.2
 
     def _calculate_overall_score(self, compound, strategy: Dict) -> float:
-        total_score = 0
-        total_weight = 0
-        
+        """Calculates a weighted overall score for a compound based on target properties."""
+        total_score, total_weight = 0, 0
         target_properties = strategy.get('target_properties', {})
         
-        # FIX: Check if target_properties is a dictionary
-        if isinstance(target_properties, dict):
-            for prop_name, criteria in target_properties.items():
-                weight = criteria.get('weight', 0.1)
-                prop_score = self._score_compound_for_property(compound, prop_name, criteria)
-                
-                total_score += prop_score * weight
-                total_weight += weight
-        else:
-            # Default scoring if target_properties is not a dict
-            total_score = 0.5
-            total_weight = 1.0
+        if not isinstance(target_properties, dict): return 0.5
         
-        # Apply safety constraints
-        constraints = strategy.get('safety_constraints', [])
-        constraint_penalty = self._check_constraints(compound, constraints)
+        for prop_name, criteria in target_properties.items():
+            weight = criteria.get('weight', 0.1)
+            prop_score = self._score_compound_for_property(compound, prop_name, criteria)
+            total_score += prop_score * weight
+            total_weight += weight
         
-        overall_score = total_score / max(total_weight, 0.1)
-        return max(0.1, overall_score - constraint_penalty)  # Minimum 0.1 score
+        # Apply a penalty for any safety constraint violations
+        penalty = self._check_constraints(compound, strategy.get('safety_constraints', []))
+        
+        overall_score = (total_score / max(total_weight, 0.1)) - penalty
+        return max(0.1, overall_score) # Ensure a minimum score
 
     def _check_constraints(self, compound, constraints: List[str]) -> float:
+        """Applies a penalty for safety constraint violations based on compound name."""
         penalty = 0.0
-        formula = getattr(compound, 'molecular_formula', '')
-        name_lower = str(compound.iupac_name).lower() if compound.iupac_name else ""
-        
-        for constraint in constraints:
-            if constraint == 'non_toxic':
-                # Simple heuristic - avoid heavy metals and highly chlorinated
-                if any(element in formula for element in ['Pb', 'Hg', 'Cd', 'As']):
-                    penalty += 0.8
-                elif 'Cl' in formula and formula.count('Cl') > 3:
-                    penalty += 0.4
-            
-            elif constraint == 'pfas_free':
-                if 'F' in formula and any(term in name_lower for term in ['fluoro', 'perfluoro']):
-                    penalty += 0.6
-                elif 'F' in formula:
-                    penalty += 0.3  # Minor penalty for any fluorine
-            
-            elif constraint == 'biodegradable':
-                # Complex molecules and silicones less biodegradable
-                if compound.molecular_weight and compound.molecular_weight > 600:
-                    penalty += 0.3
-                if any(term in name_lower for term in ['siloxane', 'silicone']):
-                    penalty += 0.4
-        
+        name = str(getattr(compound, 'iupac_name', '')).lower()
+        if 'pfas_free' in constraints and 'fluoro' in name:
+            penalty += 0.3
+        if 'non_toxic' in constraints and any(term in name for term in ['toxic', 'poison', 'hazard']):
+            penalty += 0.3
         return penalty
+
