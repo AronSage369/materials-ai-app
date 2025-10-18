@@ -22,7 +22,8 @@ class MaterialsAIEngine:
         self.api_key = api_key
         genai.configure(api_key=api_key)
         
-        model_names = ['gemini-1.5-pro-latest', 'gemini-1.5-flash-latest', 'gemini-pro']
+        # FIX: Using stable model names to prevent 404 errors. 'gemini-pro' is a reliable choice.
+        model_names = ['gemini-pro', 'gemini-1.5-flash-latest']
         
         for model_name in model_names:
             try:
@@ -37,6 +38,7 @@ class MaterialsAIEngine:
 
     def interpret_challenge(self, challenge_text: str, material_type: str, negotiation_round: int = 0) -> Dict[str, Any]:
         if not self.model:
+            st.warning("⚠️ No Gemini model initialized. Using default strategy.")
             return self.get_default_strategy(material_type, negotiation_round)
         
         # Adjust prompt based on negotiation round
@@ -84,7 +86,8 @@ class MaterialsAIEngine:
         # Progressive relaxation of requirements
         relaxation_factor = max(0.5, 1.0 - (negotiation_round * 0.2))  # Maximum 50% relaxation
         
-        base_strategy = {
+        # Define base strategies for different material types
+        base_strategies = {
             "Coolant/Lubricant": {
                 "material_class": "coolant",
                 "target_properties": {
@@ -96,19 +99,22 @@ class MaterialsAIEngine:
                     "cost": {"max": 80 / relaxation_factor, "target": 40, "unit": "$/kg", "weight": 0.15}
                 },
                 "safety_constraints": ["non_toxic", "pfas_free", "non_flammable"],
-                "search_strategy": {
-                    "chemical_classes": ["silicones", "esters", "polyalphaolefins", "glycols", "hydrocarbons"],
-                    "search_terms": [
-                        "hexamethyldisiloxane", "octamethyltrisiloxane", "polydimethylsiloxane",
-                        "mineral oil", "paraffin oil", "polyalphaolefin", "propylene glycol",
-                        "ethylene glycol", "dioctyl sebacate", "dibutyl sebacate",
-                        "alkylbenzene", "synthetic oil", "ester oil"
-                    ]
-                }
+            },
+            "Adsorbent": {
+                "material_class": "adsorbent",
+                "target_properties": {
+                    "surface_area": {"min": 1000 * relaxation_factor, "target": 1500, "unit": "m²/g", "weight": 0.4},
+                    "pore_volume": {"min": 0.6 * relaxation_factor, "target": 0.8, "unit": "cm³/g", "weight": 0.3},
+                    "co2_capacity": {"min": 2.5 * relaxation_factor, "target": 3.5, "unit": "mmol/g", "weight": 0.2},
+                    "stability": {"min": 0.8, "target": 0.95, "unit": "score", "weight": 0.1}
+                },
+                "safety_constraints": ["non_toxic", "chemically_stable"],
             }
+            # Add more material types here in the future
         }
         
-        return base_strategy.get(material_type, base_strategy["Coolant/Lubricant"])
+        # Return the selected strategy or default to Coolant/Lubricant
+        return base_strategies.get(material_type, base_strategies["Coolant/Lubricant"])
 
     def multi_agent_formulation_generation(self, compounds_data: Dict, strategy: Dict) -> List[Dict]:
         """Multi-agent system that tries different formulation strategies"""
@@ -117,6 +123,10 @@ class MaterialsAIEngine:
         specialists = compounds_data.get('specialists', {})
         balanced = compounds_data.get('balanced', [])
         
+        if not balanced and not specialists:
+            st.warning("⚠️ No compounds available for formulation generation.")
+            return []
+
         st.write("🧠 Starting multi-agent formulation generation...")
         
         # Agent 1: Conservative Agent (strict requirements, simple formulations)
@@ -325,7 +335,6 @@ class MaterialsAIEngine:
             
             # Base + 2 specialists (ternary)
             if len(specialists) >= 2:
-                # FIX: Changed specialists() to specialists.keys() to fix TypeError
                 spec_props = list(specialists.keys())[:2]
                 specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists.get(prop)]
                 
@@ -341,7 +350,6 @@ class MaterialsAIEngine:
             
             # Base + 3 specialists (quaternary)
             if len(specialists) >= 3:
-                # FIX: Changed specialists() to specialists.keys() to fix TypeError
                 spec_props = list(specialists.keys())[:3]
                 specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists.get(prop)]
                 
@@ -361,8 +369,8 @@ class MaterialsAIEngine:
         """Agent that creates complex cocktail mixtures"""
         formulations = []
         
-        if len(balanced) >= 4:
-            # Create complex cocktails with 4-5 compounds
+        if len(balanced) >= 5:
+            # Create complex cocktails with 5 compounds
             top_compounds = [c[0] for c in balanced[:5]]
             top_scores = [c[1] for c in balanced[:5]]
             
@@ -371,7 +379,6 @@ class MaterialsAIEngine:
                 [0.35, 0.25, 0.2, 0.15, 0.05],  # Graduated
                 [0.4, 0.2, 0.2, 0.1, 0.1],      # Balanced
                 [0.5, 0.15, 0.15, 0.1, 0.1],    # Strong base
-                [0.3, 0.25, 0.2, 0.15, 0.1],    # Even distribution
             ]
             
             for recipe in cocktail_recipes:
@@ -412,27 +419,26 @@ class MaterialsAIEngine:
             for i, compound in enumerate(compounds):
                 if (hasattr(compound, 'molecular_weight') and 
                     compound.molecular_weight and 
-                    compound.molecular_weight > 0):
+                    float(compound.molecular_weight) > 0):
                     
                     # moles = mass / molecular_weight
-                    mole_amount = mass_ratios[i] / compound.molecular_weight
+                    mole_amount = mass_ratios[i] / float(compound.molecular_weight)
                     moles.append(mole_amount)
                     total_moles += mole_amount
                 else:
-                    # If molecular weight not available, use mass ratio as fallback
-                    moles.append(mass_ratios[i])
-                    total_moles += mass_ratios[i]
+                    # If molecular weight not available, cannot calculate moles accurately
+                    return [] # Return empty list to indicate failure
             
             # Normalize to get mole fractions
             if total_moles > 0:
                 mole_fractions = [mole / total_moles for mole in moles]
                 return mole_fractions
             else:
-                return mass_ratios  # Fallback to mass ratios
+                return []
             
         except Exception as e:
             st.write(f"⚠️ Error calculating mole ratios: {e}")
-            return mass_ratios  # Fallback to mass ratios
+            return []  # Return empty on error
 
     def _remove_duplicate_formulations(self, formulations: List[Dict]) -> List[Dict]:
         """Remove duplicate formulations based on compound combinations"""
@@ -441,6 +447,7 @@ class MaterialsAIEngine:
         
         for formulation in formulations:
             if 'compounds' in formulation:
+                # Create a key from sorted CIDs and ratios
                 cids = tuple(sorted([getattr(c, 'cid', 'unknown') for c in formulation['compounds']]))
                 ratios_key = tuple(formulation.get('ratios', []))
                 key = (cids, ratios_key)
@@ -457,10 +464,8 @@ class MaterialsAIEngine:
         
         if not formulations:
             return {
-                'approved_formulations': [],
-                'rejected_formulations': [],
-                'search_metrics': {'compounds_evaluated': 0, 'formulations_generated': 0, 'formulations_approved': 0},
-                'strategy': strategy,
+                'approved_formulations': [], 'rejected_formulations': [],
+                'search_metrics': {}, 'strategy': strategy,
                 'negotiation_round': negotiation_round
             }
         
@@ -479,7 +484,6 @@ class MaterialsAIEngine:
             feasibility = formulation.get('feasibility', {})
             compatibility_score = self.calculate_compatibility_score(feasibility)
             
-            # Adjust scoring based on negotiation round - more lenient each round
             negotiation_bonus = negotiation_round * 0.08
             overall_score = min(1.0, (property_score * 0.7 + compatibility_score * 0.3) + negotiation_bonus)
             
@@ -503,14 +507,14 @@ class MaterialsAIEngine:
         approved_formulations.sort(key=lambda x: x['score'], reverse=True)
         rejected_formulations.sort(key=lambda x: x['score'], reverse=True)
         
+        # FIX: Return ALL approved/rejected formulations. Slicing will be handled in app.py
         return {
-            'approved_formulations': approved_formulations[:10],
-            'rejected_formulations': rejected_formulations[:10],
+            'approved_formulations': approved_formulations,
+            'rejected_formulations': rejected_formulations,
             'search_metrics': {
                 'compounds_evaluated': len(formulations) * 2,
                 'formulations_generated': len(formulations),
                 'formulations_approved': len(approved_formulations),
-                'negotiation_round': negotiation_round + 1
             },
             'strategy': strategy,
             'confidence_threshold': adaptive_confidence
@@ -523,6 +527,8 @@ class MaterialsAIEngine:
         predicted_props = formulation.get('predicted_properties', {})
         target_props = strategy.get('target_properties', {})
         
+        if not isinstance(target_props, dict): return 0.5
+
         for prop_name, criteria in target_props.items():
             weight = criteria.get('weight', 0.1)
             target_value = criteria.get('target')
@@ -532,18 +538,20 @@ class MaterialsAIEngine:
             pred_value_data = predicted_props.get(prop_name, {})
             pred_value = pred_value_data.get('value', 0) if isinstance(pred_value_data, dict) else pred_value_data
             
-            if target_value is not None and pred_value:
-                if target_value > 0:
-                    normalized_diff = abs(pred_value - target_value) / target_value
-                    prop_score = max(0, 1 - normalized_diff)
-                else:
-                    prop_score = 0.5
-            elif min_value is not None and pred_value:
-                prop_score = 1.0 if pred_value >= min_value else pred_value / min_value
-            elif max_value is not None and pred_value:
-                prop_score = 1.0 if pred_value <= max_value else max_value / pred_value
-            else:
-                prop_score = 0.5
+            if not isinstance(pred_value, (int, float)): continue
+
+            prop_score = 0.5
+            if target_value is not None and target_value > 0:
+                normalized_diff = abs(pred_value - target_value) / target_value
+                prop_score = max(0, 1 - normalized_diff)
+            elif min_value is not None and pred_value >= min_value:
+                prop_score = 1.0
+            elif min_value is not None and pred_value < min_value:
+                prop_score = max(0, pred_value / min_value)
+            elif max_value is not None and pred_value <= max_value:
+                prop_score = 1.0
+            elif max_value is not None and pred_value > max_value:
+                prop_score = max(0, max_value / pred_value)
             
             total_score += prop_score * weight
             total_weight += weight
@@ -551,71 +559,37 @@ class MaterialsAIEngine:
         return total_score / max(total_weight, 0.1)
 
     def calculate_compatibility_score(self, feasibility: Dict) -> float:
-        if not feasibility:
-            return 0.7
-        
+        if not feasibility: return 0.7
         risk_score = feasibility.get('risk_score', 0.5)
         issues = feasibility.get('compatibility_issues', [])
-        
         base_score = 1.0 - risk_score
         issue_penalty = len(issues) * 0.1
-        
         return max(0, base_score - issue_penalty)
 
     def generate_ai_decision(self, formulation: Dict, overall_score: float, 
                            min_confidence: float, negotiation_round: int) -> Dict:
         approved = overall_score >= min_confidence
-        
         reasons = []
         
-        # Score-based reasoning
-        if overall_score >= 0.8:
-            reasons.append("Excellent property match with requirements")
-        elif overall_score >= 0.7:
-            reasons.append("Very good overall performance")
-        elif overall_score >= 0.6:
-            reasons.append("Good performance with minor compromises")
-        elif overall_score >= 0.5:
-            reasons.append("Acceptable performance with some trade-offs")
-        elif overall_score >= 0.4:
-            reasons.append("Marginal performance - significant compromises")
-        else:
-            reasons.append("Poor performance - major compromises required")
+        if overall_score >= 0.8: reasons.append("Excellent property match with requirements")
+        elif overall_score >= 0.6: reasons.append("Good performance with minor compromises")
+        else: reasons.append("Acceptable performance with some trade-offs")
         
-        # Agent-specific reasoning
         agent = formulation.get('agent', 'unknown')
+        if agent == 'conservative': reasons.append("Conservative approach - low implementation risk")
+        elif agent == 'innovative': reasons.append("Innovative formulation - potential high reward")
+        
         compound_count = len(formulation.get('compounds', []))
+        if compound_count == 1: reasons.append("Single compound - simplest implementation")
+        elif compound_count == 2: reasons.append("Binary mixture - good balance of simplicity and performance")
+        else: reasons.append(f"Complex mixture ({compound_count} compounds) - maximum optimization potential")
         
-        if agent == 'conservative':
-            reasons.append("Conservative approach - low implementation risk")
-        elif agent == 'innovative':
-            reasons.append(f"Innovative {compound_count}-compound formulation - potential high reward")
-        elif agent == 'practical':
-            reasons.append("Practical formulation - good balance of performance and feasibility")
-        elif agent == 'specialist':
-            reasons.append("Specialized optimization - targeted property enhancement")
-        elif agent == 'cocktail':
-            reasons.append(f"Complex cocktail formulation ({compound_count} compounds) - broad optimization")
-        
-        # Complexity analysis
-        if compound_count == 1:
-            reasons.append("Single compound - simplest implementation")
-        elif compound_count == 2:
-            reasons.append("Binary mixture - good balance of simplicity and performance")
-        elif compound_count == 3:
-            reasons.append("Ternary mixture - good complexity for optimization")
-        else:
-            reasons.append(f"Complex mixture ({compound_count} compounds) - maximum optimization potential")
-        
-        # Negotiation context
-        if negotiation_round > 0:
-            reasons.append(f"Round {negotiation_round + 1} - relaxed evaluation criteria")
+        if negotiation_round > 0: reasons.append(f"Round {negotiation_round + 1} - relaxed evaluation criteria")
         
         return {
-            'approved': approved,
-            'confidence': overall_score,
+            'approved': approved, 'confidence': overall_score,
             'reasons': reasons,
-            'recommendations': ["Strongly recommended for experimental validation" if approved else "Consider with caution - may require further optimization"],
+            'recommendations': ["Strongly recommended for experimental validation" if approved else "Consider with caution"],
             'risk_factors': formulation.get('feasibility', {}).get('compatibility_issues', [])
         }
 
@@ -625,40 +599,24 @@ class MaterialsAIEngine:
         return clean_text
 
     def extract_json_from_response(self, response_text: str) -> str:
-        json_match = re.search(r'\{[^{}]*\{[^{}]*\}[^{}]*\}', response_text, re.DOTALL)
-        if json_match:
-            return json_match.group()
-        
-        return clean_text
-
-    def extract_json_from_response(self, response_text: str) -> str:
-        # Find the first '{' and the last '}'
         start_index = response_text.find('{')
         end_index = response_text.rfind('}')
-        
         if start_index != -1 and end_index != -1 and end_index > start_index:
-            json_str = response_text[start_index:end_index+1]
-            return json_str
+            return response_text[start_index:end_index+1]
         
-        # Fallback regex if simple slicing fails
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            return json_match.group()
-        else:
-            raise ValueError("No JSON found in AI response")
+        if json_match: return json_match.group()
+        else: raise ValueError("No JSON found in AI response")
 
     def validate_strategy(self, strategy: Dict, material_type: str, negotiation_round: int) -> Dict:
         if 'material_class' not in strategy:
             strategy['material_class'] = material_type.lower()
-        
         if 'target_properties' not in strategy:
             strategy['target_properties'] = self.get_default_strategy(material_type, negotiation_round)['target_properties']
-        
         if 'search_strategy' not in strategy:
-            strategy['search_strategy'] = self.get_default_strategy(material_type, negotiation_round)['search_strategy']
-        
+            default_strategy = self.get_default_strategy(material_type, negotiation_round)
+            strategy['search_strategy'] = default_strategy.get('search_strategy', {})
         if 'safety_constraints' not in strategy:
             strategy['safety_constraints'] = ['non_toxic', 'pfas_free']
-        
         return strategy
 
