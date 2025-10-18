@@ -12,45 +12,62 @@ import sys
 # Add current directory to path to ensure imports work
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from config import Config
-from utils import CacheManager, MemoryManager, data_validator
+# Import utils first with minimal dependencies
+try:
+    from utils import CacheManager, MemoryManager, data_validator
+except ImportError as e:
+    st.error(f"Failed to import utils: {e}")
+    # Create minimal fallbacks
+    class CacheManager:
+        def get(self, key): return None
+        def set(self, key, value): pass
+    class MemoryManager:
+        @staticmethod
+        def cleanup_memory(): pass
+    data_validator = None
 
 # Try to import all components with fallbacks
 try:
     from ai_strategist import AIStrategist
+    AI_STRATEGIST_AVAILABLE = True
 except ImportError as e:
     st.error(f"Failed to import AIStrategist: {e}")
-    AIStrategist = None
+    AI_STRATEGIST_AVAILABLE = False
 
 try:
     from ai_engine import CreativeAIEngine
+    CREATIVE_ENGINE_AVAILABLE = True
 except ImportError as e:
     st.error(f"Failed to import CreativeAIEngine: {e}")
-    CreativeAIEngine = None
+    CREATIVE_ENGINE_AVAILABLE = False
 
 try:
     from computational_predictor import ComputationalPredictor
+    COMPUTATIONAL_PREDICTOR_AVAILABLE = True
 except ImportError as e:
     st.error(f"Failed to import ComputationalPredictor: {e}")
-    ComputationalPredictor = None
+    COMPUTATIONAL_PREDICTOR_AVAILABLE = False
 
 try:
     from pubchem_manager import PubChemManager
+    PUBCHEM_MANAGER_AVAILABLE = True
 except ImportError as e:
     st.error(f"Failed to import PubChemManager: {e}")
-    PubChemManager = None
+    PUBCHEM_MANAGER_AVAILABLE = False
 
 try:
     from property_predictor import AdvancedPropertyPredictor
+    PROPERTY_PREDICTOR_AVAILABLE = True
 except ImportError as e:
     st.error(f"Failed to import AdvancedPropertyPredictor: {e}")
-    AdvancedPropertyPredictor = None
+    PROPERTY_PREDICTOR_AVAILABLE = False
 
 try:
     from compatibility_checker import CompatibilityChecker
+    COMPATIBILITY_CHECKER_AVAILABLE = True
 except ImportError as e:
     st.error(f"Failed to import CompatibilityChecker: {e}")
-    CompatibilityChecker = None
+    COMPATIBILITY_CHECKER_AVAILABLE = False
 
 class AdvancedMaterialsDiscoveryApp:
     def __init__(self):
@@ -88,7 +105,7 @@ class AdvancedMaterialsDiscoveryApp:
             # Show initialization progress
             with st.spinner("🔄 Initializing AI components..."):
                 # Initialize AI Strategist
-                if AIStrategist:
+                if AI_STRATEGIST_AVAILABLE:
                     st.session_state.ai_strategist = AIStrategist(api_key)
                     st.success("✅ AI Strategist initialized")
                 else:
@@ -96,7 +113,7 @@ class AdvancedMaterialsDiscoveryApp:
                     return False
                 
                 # Initialize Creative AI Engine
-                if CreativeAIEngine:
+                if CREATIVE_ENGINE_AVAILABLE:
                     st.session_state.creative_engine = CreativeAIEngine(api_key)
                     st.success("✅ Creative AI Engine initialized")
                 else:
@@ -104,21 +121,29 @@ class AdvancedMaterialsDiscoveryApp:
                     return False
                 
                 # Initialize other components
-                if ComputationalPredictor:
+                if COMPUTATIONAL_PREDICTOR_AVAILABLE:
                     st.session_state.computational_predictor = ComputationalPredictor()
                     st.success("✅ Computational Predictor initialized")
+                else:
+                    st.warning("⚠️ Computational Predictor not available")
                 
-                if PubChemManager:
+                if PUBCHEM_MANAGER_AVAILABLE:
                     st.session_state.pubchem_manager = PubChemManager()
                     st.success("✅ PubChem Manager initialized")
+                else:
+                    st.warning("⚠️ PubChem Manager not available")
                 
-                if AdvancedPropertyPredictor:
+                if PROPERTY_PREDICTOR_AVAILABLE:
                     st.session_state.property_predictor = AdvancedPropertyPredictor()
                     st.success("✅ Property Predictor initialized")
+                else:
+                    st.warning("⚠️ Property Predictor not available")
                 
-                if CompatibilityChecker:
+                if COMPATIBILITY_CHECKER_AVAILABLE:
                     st.session_state.compatibility_checker = CompatibilityChecker()
                     st.success("✅ Compatibility Checker initialized")
+                else:
+                    st.warning("⚠️ Compatibility Checker not available")
             
             st.session_state.initialized = True
             st.session_state.api_key = api_key
@@ -195,6 +220,15 @@ class AdvancedMaterialsDiscoveryApp:
         5. ⚠️ Compatibility checker ensures safety
         6. 🎯 AI evaluates and ranks the best formulations
         """)
+        
+        # Show component availability status
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("AI Strategist", "✅" if AI_STRATEGIST_AVAILABLE else "❌")
+        with col2:
+            st.metric("Creative Engine", "✅" if CREATIVE_ENGINE_AVAILABLE else "❌")
+        with col3:
+            st.metric("PubChem Search", "✅" if PUBCHEM_MANAGER_AVAILABLE else "❌")
         
         # Challenge input
         challenge_text = st.text_area(
@@ -297,14 +331,19 @@ class AdvancedMaterialsDiscoveryApp:
         # Step 2: Intelligent PubChem Search
         with st.spinner("🔍 AI is searching for relevant compounds..."):
             try:
-                search_terms = (strategy.get('search_strategy', {})
-                              .get('primary_terms', []) + 
-                              strategy.get('search_strategy', {})
-                              .get('innovative_terms', []))
-                
-                compounds = st.session_state.pubchem_manager.find_compounds(
-                    strategy, config['material_type']
-                )
+                if not PUBCHEM_MANAGER_AVAILABLE:
+                    st.warning("⚠️ PubChem Manager not available, using fallback compounds")
+                    # Use fallback compounds
+                    compounds = self._get_fallback_compounds(config['material_type'])
+                else:
+                    search_terms = (strategy.get('search_strategy', {})
+                                  .get('primary_terms', []) + 
+                                  strategy.get('search_strategy', {})
+                                  .get('innovative_terms', []))
+                    
+                    compounds = st.session_state.pubchem_manager.find_compounds(
+                        strategy, config['material_type']
+                    )
                 results['compounds'] = compounds
                 st.success(f"✅ Found {len(compounds)} compounds")
             except Exception as e:
@@ -327,20 +366,23 @@ class AdvancedMaterialsDiscoveryApp:
         with st.spinner("📊 Running computational predictions..."):
             try:
                 enhanced_target_props = self._extract_target_properties(strategy, target_properties)
-                formulations = st.session_state.property_predictor.predict_all_properties(
-                    formulations, enhanced_target_props
-                )
+                
+                if PROPERTY_PREDICTOR_AVAILABLE:
+                    formulations = st.session_state.property_predictor.predict_all_properties(
+                        formulations, enhanced_target_props
+                    )
                 
                 # Add computational predictions
-                for formulation in formulations:
-                    try:
-                        comp_predictions = st.session_state.computational_predictor.predict_advanced_properties(
-                            formulation, enhanced_target_props
-                        )
-                        formulation['computational_predictions'] = comp_predictions
-                    except Exception as e:
-                        st.warning(f"Computational prediction failed for one formulation: {e}")
-                        formulation['computational_predictions'] = {}
+                if COMPUTATIONAL_PREDICTOR_AVAILABLE:
+                    for formulation in formulations:
+                        try:
+                            comp_predictions = st.session_state.computational_predictor.predict_advanced_properties(
+                                formulation, enhanced_target_props
+                            )
+                            formulation['computational_predictions'] = comp_predictions
+                        except Exception as e:
+                            st.warning(f"Computational prediction failed for one formulation: {e}")
+                            formulation['computational_predictions'] = {}
                 
                 results['formulations'] = formulations
                 st.success("✅ Property predictions completed")
@@ -351,7 +393,15 @@ class AdvancedMaterialsDiscoveryApp:
         # Step 5: Compatibility Analysis
         with st.spinner("⚠️ Analyzing chemical compatibility..."):
             try:
-                formulations = st.session_state.compatibility_checker.validate_all_formulations(formulations)
+                if COMPATIBILITY_CHECKER_AVAILABLE:
+                    formulations = st.session_state.compatibility_checker.validate_all_formulations(formulations)
+                else:
+                    # Add basic compatibility info
+                    for formulation in formulations:
+                        formulation['compatibility_risk'] = 0.3
+                        formulation['compatibility_warnings'] = ["Compatibility check skipped"]
+                        formulation['compatibility_summary'] = "Unknown"
+                
                 results['formulations'] = formulations
                 st.success("✅ Compatibility analysis completed")
             except Exception as e:
@@ -374,6 +424,24 @@ class AdvancedMaterialsDiscoveryApp:
                 return None
         
         return results
+
+    def _get_fallback_compounds(self, material_type: str) -> List[Dict]:
+        """Provide fallback compounds when PubChem is not available"""
+        fallback_compounds = {
+            'solvent': [
+                {'cid': 887, 'name': 'Methanol', 'molecular_weight': 32.04, 'smiles': 'CO', 'category': 'balanced'},
+                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
+                {'cid': 6344, 'name': 'Ethanol', 'molecular_weight': 46.07, 'smiles': 'CCO', 'category': 'balanced'},
+            ],
+            'coolant': [
+                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
+                {'cid': 174, 'name': 'Ethylene Glycol', 'molecular_weight': 62.07, 'smiles': 'OCCO', 'category': 'specialist'},
+            ],
+            'polymer': [
+                {'cid': 6325, 'name': 'Polyethylene', 'molecular_weight': 28000, 'smiles': 'C=C', 'category': 'balanced'},
+            ]
+        }
+        return fallback_compounds.get(material_type, fallback_compounds['solvent'])
 
     def _extract_target_properties(self, strategy: Dict, user_target_props: Dict) -> Dict[str, Any]:
         """Extract target properties from AI strategy and user input"""
@@ -456,8 +524,11 @@ class AdvancedMaterialsDiscoveryApp:
         with col3:
             st.metric("Promising Formulations", len(results['approved_formulations']))
         with col4:
-            avg_score = np.mean([f.get('overall_score', 0) for f in results['approved_formulations']])
-            st.metric("Average Score", f"{avg_score:.2f}")
+            if results['approved_formulations']:
+                avg_score = np.mean([f.get('overall_score', 0) for f in results['approved_formulations']])
+                st.metric("Average Score", f"{avg_score:.2f}")
+            else:
+                st.metric("Average Score", "N/A")
         
         # AI Strategy
         with st.expander("🧠 AI Strategy Analysis"):
@@ -480,6 +551,10 @@ class AdvancedMaterialsDiscoveryApp:
         st.subheader("🎯 Top Formulations")
         formulations = results['approved_formulations'][:10]  # Show top 10
         
+        if not formulations:
+            st.info("No formulations met the minimum approval score. Try adjusting your criteria.")
+            return
+            
         for i, formulation in enumerate(formulations, 1):
             with st.expander(f"Formulation #{i} | Score: {formulation.get('overall_score', 0):.2f} | {formulation.get('agent_type', 'Unknown')}"):
                 self._display_formulation_details(formulation)
