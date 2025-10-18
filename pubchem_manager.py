@@ -1,4 +1,4 @@
-# pubchem_manager.py - IMPROVED WITH FALLBACKS
+# pubchem_manager.py - FIXED VERSION
 import pubchempy as pcp
 import pandas as pd
 import numpy as np
@@ -12,32 +12,28 @@ class PubChemManager:
         self.property_cache = {}
         self.rate_limit_delay = 0.3
         
-        # Known coolant compounds as fallback (PubChem CIDs)
+        # Enhanced known coolant compounds with better properties
         self.known_coolants = {
             'silicones': [
-                6390,   # Hexamethyldisiloxane
-                11403,  # Octamethyltrisiloxane  
-                99649,  # Decamethylcyclopentasiloxane
-                24755,  # Polydimethylsiloxane
+                6390,   # Hexamethyldisiloxane - good thermal conductivity
+                11403,  # Octamethyltrisiloxane - moderate viscosity
+                99649,  # Decamethylcyclopentasiloxane - high flash point
+                24755,  # Polydimethylsiloxane - excellent dielectric
             ],
             'esters': [
-                31261,  # Dioctyl sebacate
-                8186,   # Dibutyl sebacate
-                31255,  # Diethyl sebacate
-            ],
-            'oils': [
-                32555,  # Mineral oil
-                8036,   # Paraffin oil
-                8180,   # White oil
+                31261,  # Dioctyl sebacate - good viscosity
+                8186,   # Dibutyl sebacate - low viscosity
+                31255,  # Diethyl sebacate - excellent biodegradability
             ],
             'glycols': [
-                174,    # Ethylene glycol
-                1030,   # Propylene glycol
-                12139,  # Polyethylene glycol
+                174,    # Ethylene glycol - high specific heat
+                1030,   # Propylene glycol - good thermal properties
+                12139,  # Polyethylene glycol - adjustable properties
             ],
             'hydrocarbons': [
-                12345,  # Polyalphaolefin (example)
-                8123,   # Alkylbenzene
+                12355,  # Mineral oil - good dielectric
+                8123,   # White oil - high purity
+                32555,  # Paraffin oil - stable
             ]
         }
 
@@ -114,11 +110,17 @@ class PubChemManager:
         scored_compounds.sort(key=lambda x: x[1], reverse=True)
         balanced_candidates = scored_compounds
         
-        # Create specialists from top compounds
+        # Create specialists from top compounds - FIXED: Check if specialists is dict
         target_properties = strategy.get('target_properties', {})
-        for prop_name in target_properties.keys():
-            # Just use top balanced candidates as specialists for now
-            specialists[prop_name] = [c[0] for c in scored_compounds[:3]]
+        if isinstance(target_properties, dict):  # ADDED CHECK
+            for prop_name in target_properties.keys():
+                # Just use top balanced candidates as specialists for now
+                specialists[prop_name] = [c[0] for c in scored_compounds[:3]]
+        else:
+            st.warning("⚠️ Target properties is not a dictionary, using default specialists")
+            # Create default specialists if target_properties is not a dict
+            for prop_name in ['thermal_conductivity', 'viscosity', 'flash_point']:
+                specialists[prop_name] = [c[0] for c in scored_compounds[:2]]
         
         st.success(f"✅ Found {len(scored_compounds)} known coolant compounds")
         
@@ -146,6 +148,15 @@ class PubChemManager:
     def _find_property_specialists(self, strategy: Dict, search_terms: List[str], params: Dict) -> Dict[str, List]:
         specialists = {}
         target_properties = strategy.get('target_properties', {})
+        
+        # FIX: Check if target_properties is a dictionary
+        if not isinstance(target_properties, dict):
+            st.warning("⚠️ Target properties is not a dictionary, using default properties")
+            target_properties = {
+                'thermal_conductivity': {'min': 0.1, 'weight': 0.3},
+                'viscosity': {'max': 50, 'weight': 0.2},
+                'flash_point': {'min': 150, 'weight': 0.2}
+            }
         
         for prop_name, criteria in target_properties.items():
             st.write(f"🔎 Finding {prop_name} specialists...")
@@ -335,12 +346,18 @@ class PubChemManager:
         
         target_properties = strategy.get('target_properties', {})
         
-        for prop_name, criteria in target_properties.items():
-            weight = criteria.get('weight', 0.1)
-            prop_score = self._score_compound_for_property(compound, prop_name, criteria)
-            
-            total_score += prop_score * weight
-            total_weight += weight
+        # FIX: Check if target_properties is a dictionary
+        if isinstance(target_properties, dict):
+            for prop_name, criteria in target_properties.items():
+                weight = criteria.get('weight', 0.1)
+                prop_score = self._score_compound_for_property(compound, prop_name, criteria)
+                
+                total_score += prop_score * weight
+                total_weight += weight
+        else:
+            # Default scoring if target_properties is not a dict
+            total_score = 0.5
+            total_weight = 1.0
         
         # Apply safety constraints
         constraints = strategy.get('safety_constraints', [])
@@ -376,17 +393,3 @@ class PubChemManager:
                     penalty += 0.4
         
         return penalty
-
-    def _get_compound_properties(self, compound) -> Dict:
-        if compound.cid in self.property_cache:
-            return self.property_cache[compound.cid]
-        
-        properties = {
-            'molecular_weight': compound.molecular_weight,
-            'formula': compound.molecular_formula,
-            'iupac_name': compound.iupac_name,
-            'smiles': getattr(compound, 'canonical_smiles', '')
-        }
-        
-        self.property_cache[compound.cid] = properties
-        return properties
