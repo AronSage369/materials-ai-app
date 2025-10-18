@@ -1,14 +1,15 @@
-# app.py - COMPLETE FIXED VERSION
+# app.py - COMPLETELY REWRITTEN WITH PROPER INDENTATION
 import streamlit as st
 import pandas as pd
 import numpy as np
 import json
 import time
-from typing import Dict, List, Any  # ADD THIS IMPORT
+from typing import Dict, List, Any
 from ai_engine import MaterialsAIEngine
 from pubchem_manager import PubChemManager
 from mixture_predictor import MixturePredictor
 from compatibility_checker import CompatibilityChecker
+from property_predictor import AdvancedPropertyPredictor
 
 # Configure page
 st.set_page_config(
@@ -81,6 +82,7 @@ class AdvancedMaterialsApp:
         self.pubchem_manager = PubChemManager()
         self.mixture_predictor = MixturePredictor()
         self.compatibility_checker = CompatibilityChecker()
+        self.property_predictor = AdvancedPropertyPredictor()
         
     def render_sidebar(self):
         """Render configuration sidebar"""
@@ -124,10 +126,11 @@ class AdvancedMaterialsApp:
             # Advanced options
             with st.expander("Advanced Options"):
                 min_confidence = st.slider("Minimum confidence threshold", 0.1, 1.0, 0.7)
-                max_negotiation_rounds = st.slider("Max negotiation rounds", 1, 10, 5)
+                max_negotiation_rounds = st.slider("Max negotiation rounds", 1, 10, 3)
                 enable_compatibility = st.checkbox("Enable compatibility checking", True)
                 enable_mixture_prediction = st.checkbox("Enable mixture prediction", True)
                 enable_mole_calculations = st.checkbox("Enable mole percentage calculations", True)
+                max_approved_formulations = st.slider("Max approved formulations to show", 10, 30, 20)
             
             return {
                 'gemini_key': gemini_key,
@@ -138,7 +141,8 @@ class AdvancedMaterialsApp:
                 'max_negotiation_rounds': max_negotiation_rounds,
                 'enable_compatibility': enable_compatibility,
                 'enable_mixture_prediction': enable_mixture_prediction,
-                'enable_mole_calculations': enable_mole_calculations
+                'enable_mole_calculations': enable_mole_calculations,
+                'max_approved_formulations': max_approved_formulations
             }
     
     def render_main_interface(self):
@@ -169,20 +173,20 @@ class AdvancedMaterialsApp:
             st.subheader("🎯 Advanced Features")
             st.info("""
             **New AI Capabilities:**
-            - Multi-Agent System (4 specialized agents)
+            - Multi-Agent System (5 specialized agents)
             - Adaptive Negotiation (progressive relaxation)
             - Mole Percentage Calculations
             - Complex Formulations (3-5 compounds)
+            - Advanced Property Prediction
             - Both Approved & Rejected Results
-            - Intelligent Fallbacks
             """)
             
             st.markdown("**Expected Output:**")
             st.write("• Multi-round negotiation results")
             st.write("• Complex formulations (3-5 compounds)")
             st.write("• Mole percentage compositions")
-            st.write("• Agent-specific strategies")
-            st.write("• Comprehensive analysis")
+            st.write("• Advanced property predictions")
+            st.write("• Up to 20 approved formulations")
         
         return challenge_text
     
@@ -223,10 +227,10 @@ class AdvancedMaterialsApp:
                     with st.spinner(f"Round {round_num + 1}: Calculating mole percentages..."):
                         formulations = self.ai_engine.calculate_mole_percentages(formulations)
                 
-                # Phase 5: Mixture prediction
+                # Phase 5: Advanced property prediction
                 if config['enable_mixture_prediction'] and formulations:
                     with st.spinner(f"Round {round_num + 1}: Predicting mixture properties..."):
-                        formulations = self.mixture_predictor.predict_all_properties(formulations, strategy)
+                        formulations = self.property_predictor.predict_all_properties(formulations, strategy)
                 
                 # Phase 6: Compatibility checking
                 if config['enable_compatibility'] and formulations:
@@ -243,14 +247,14 @@ class AdvancedMaterialsApp:
                 
                 # Check if we have enough approved formulations
                 approved_count = len(round_results.get('approved_formulations', []))
-                if approved_count >= 5 or round_num == max_rounds - 1:
+                if approved_count >= 10 or round_num == max_rounds - 1:
                     st.success(f"✅ Completed {round_num + 1} negotiation rounds with {approved_count} approved formulations")
                     break
                 else:
                     st.warning(f"⚠️ Only {approved_count} approved formulations. Starting next negotiation round...")
             
             # Combine results from all rounds
-            final_results = self.combine_negotiation_results(all_results)
+            final_results = self.combine_negotiation_results(all_results, config)
             return final_results
             
         except Exception as e:
@@ -258,52 +262,52 @@ class AdvancedMaterialsApp:
             st.info("💡 Try reducing the number of compounds or using Quick Scan mode")
             return None
 
-    def combine_negotiation_results(self, all_results: List[Dict]) -> Dict[str, Any]:
-    """Combine results from all negotiation rounds with improved filtering"""
-    all_approved = []
-    all_rejected = []
-    total_metrics = {
-        'compounds_evaluated': 0,
-        'formulations_generated': 0,
-        'formulations_approved': 0,
-        'negotiation_rounds': len(all_results)
-    }
-    
-    for result in all_results:
-        all_approved.extend(result.get('approved_formulations', []))
-        all_rejected.extend(result.get('rejected_formulations', []))
+    def combine_negotiation_results(self, all_results, config):
+        """Combine results from all negotiation rounds with improved filtering"""
+        all_approved = []
+        all_rejected = []
+        total_metrics = {
+            'compounds_evaluated': 0,
+            'formulations_generated': 0,
+            'formulations_approved': 0,
+            'negotiation_rounds': len(all_results)
+        }
         
-        metrics = result.get('search_metrics', {})
-        total_metrics['compounds_evaluated'] += metrics.get('compounds_evaluated', 0)
-        total_metrics['formulations_generated'] += metrics.get('formulations_generated', 0)
-        total_metrics['formulations_approved'] += metrics.get('formulations_approved', 0)
-    
-    # Remove duplicates and sort by score
-    all_approved = self.remove_duplicate_formulations(all_approved)
-    all_rejected = self.remove_duplicate_formulations(all_rejected)
-    
-    all_approved.sort(key=lambda x: x.get('score', 0), reverse=True)
-    all_rejected.sort(key=lambda x: x.get('score', 0), reverse=True)
-    
-    # ENHANCED: Show up to 20 approved formulations
-    # If more than 20 approved, filter by confidence threshold
-    if len(all_approved) > 20:
-        # Keep top 20 by score (which already considers confidence)
-        all_approved = all_approved[:20]
-        st.info(f"📊 Showing top 20 approved formulations from {len(all_approved)} total (filtered by confidence)")
-    
-    # ENHANCED: Show more rejected for analysis (up to 15)
-    top_rejected = all_rejected[:15]
-    
-    return {
-        'approved_formulations': all_approved,
-        'rejected_formulations': top_rejected,
-        'search_metrics': total_metrics,
-        'strategy': all_results[-1].get('strategy', {}) if all_results else {},
-        'negotiation_summary': f"Completed {len(all_results)} rounds with {len(all_approved)} approved formulations"
-    }
+        for result in all_results:
+            all_approved.extend(result.get('approved_formulations', []))
+            all_rejected.extend(result.get('rejected_formulations', []))
+            
+            metrics = result.get('search_metrics', {})
+            total_metrics['compounds_evaluated'] += metrics.get('compounds_evaluated', 0)
+            total_metrics['formulations_generated'] += metrics.get('formulations_generated', 0)
+            total_metrics['formulations_approved'] += metrics.get('formulations_approved', 0)
+        
+        # Remove duplicates and sort by score
+        all_approved = self.remove_duplicate_formulations(all_approved)
+        all_rejected = self.remove_duplicate_formulations(all_rejected)
+        
+        all_approved.sort(key=lambda x: x.get('score', 0), reverse=True)
+        all_rejected.sort(key=lambda x: x.get('score', 0), reverse=True)
+        
+        # Enhanced: Show up to configurable number of approved formulations
+        max_approved = config.get('max_approved_formulations', 20)
+        if len(all_approved) > max_approved:
+            # Keep top N by score (which already considers confidence)
+            all_approved = all_approved[:max_approved]
+            st.info(f"📊 Showing top {max_approved} approved formulations (filtered by confidence score)")
+        
+        # Enhanced: Show more rejected for analysis
+        top_rejected = all_rejected[:15]
+        
+        return {
+            'approved_formulations': all_approved,
+            'rejected_formulations': top_rejected,
+            'search_metrics': total_metrics,
+            'strategy': all_results[-1].get('strategy', {}) if all_results else {},
+            'negotiation_summary': f"Completed {len(all_results)} rounds with {len(all_approved)} approved formulations"
+        }
 
-    def remove_duplicate_formulations(self, formulations: List[Dict]) -> List[Dict]:
+    def remove_duplicate_formulations(self, formulations):
         """Remove duplicate formulations"""
         seen = set()
         unique = []
@@ -345,7 +349,7 @@ class AdvancedMaterialsApp:
         # Approved formulations
         approved = results.get('approved_formulations', [])
         if approved:
-            st.subheader("✅ Approved Formulations")
+            st.subheader(f"✅ Approved Formulations ({len(approved)} total)")
             st.info("These formulations met all criteria and are recommended for further development.")
             
             for i, formulation in enumerate(approved):
@@ -440,7 +444,8 @@ class AdvancedMaterialsApp:
                 if isinstance(value, dict):
                     val = value.get('value', 'N/A')
                     unit = value.get('unit', '')
-                    prop_text += f"<span class='property-badge'>{prop}: {val} {unit}</span>"
+                    confidence = value.get('confidence', 0)
+                    prop_text += f"<span class='property-badge'>{prop}: {val} {unit} (conf: {confidence:.1%})</span>"
                 else:
                     prop_text += f"<span class='property-badge'>{prop}: {value}</span>"
             st.markdown(prop_text, unsafe_allow_html=True)
@@ -537,5 +542,3 @@ Need heterogeneous catalyst for hydrogen production:
 
 if __name__ == "__main__":
     main()
-
-
