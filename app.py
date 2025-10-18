@@ -258,7 +258,7 @@ class AdvancedMaterialsApp:
             st.info("💡 Try reducing the number of compounds or using Quick Scan mode")
             return None
 
-   def combine_negotiation_results(self, all_results: List[Dict]) -> Dict[str, Any]:
+    def combine_negotiation_results(self, all_results: List[Dict]) -> Dict[str, Any]:
     """Combine results from all negotiation rounds with improved filtering"""
     all_approved = []
     all_rejected = []
@@ -537,4 +537,5 @@ Need heterogeneous catalyst for hydrogen production:
 
 if __name__ == "__main__":
     main()
+
 
