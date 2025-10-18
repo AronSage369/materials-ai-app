@@ -1,167 +1,240 @@
-# property_predictor.py - ADVANCED PROPERTY PREDICTION (DEFINITIVE FIX)
 import numpy as np
-from typing import Dict, List, Any
-import streamlit as st
+from typing import Dict, List, Any, Optional
+import re
 
 class AdvancedPropertyPredictor:
     def __init__(self):
-        self.prediction_models = {
+        self.property_models = {
             'thermal_conductivity': self.predict_thermal_conductivity,
             'viscosity': self.predict_viscosity,
+            'boiling_point': self.predict_boiling_point,
             'flash_point': self.predict_flash_point,
             'specific_heat': self.predict_specific_heat,
+            'density': self.predict_density,
+            'surface_tension': self.predict_surface_tension,
+            'refractive_index': self.predict_refractive_index,
             'dielectric_constant': self.predict_dielectric_constant,
-            'dielectric_strength': self.predict_dielectric_strength,
-            'autoignition_temperature': self.predict_autoignition_temp,
-            'pour_point': self.predict_pour_point,
-            'cost': self.predict_cost,
-            'surface_area': self.predict_surface_area,
-            'co2_capacity': self.predict_co2_capacity,
-            'stability': self.predict_stability
+            'solubility_parameter': self.predict_solubility_parameter
         }
         
-    def predict_all_properties(self, formulations: List[Dict], strategy: Dict) -> List[Dict]:
-        target_properties = strategy.get('target_properties', {})
-        if not isinstance(target_properties, dict): return formulations
-
+    def predict_all_properties(self, formulations: List[Dict], 
+                             target_properties: Dict) -> List[Dict]:
+        """Predict all required properties for formulations"""
         for formulation in formulations:
-            compounds = formulation.get('compounds', [])
-            ratios = formulation.get('ratios', [1.0] * len(compounds))
-            if not compounds: continue
-            
             predicted_properties = {}
+            confidence_scores = {}
+            
             for prop_name in target_properties.keys():
-                prediction = self.predict_property_for_formulation(compounds, ratios, prop_name)
-                predicted_properties[prop_name] = prediction
+                if prop_name in self.property_models:
+                    try:
+                        value, confidence = self.property_models[prop_name](formulation)
+                        predicted_properties[prop_name] = value
+                        confidence_scores[prop_name] = confidence
+                    except Exception as e:
+                        print(f"Error predicting {prop_name}: {e}")
+                        predicted_properties[prop_name] = 0.0
+                        confidence_scores[prop_name] = 0.0
+            
             formulation['predicted_properties'] = predicted_properties
+            formulation['prediction_confidence'] = np.mean(list(confidence_scores.values())) if confidence_scores else 0.5
+            
         return formulations
-    
-    def predict_property_for_formulation(self, compounds: List, ratios: List[float], property_name: str) -> Dict[str, Any]:
-        predictor = self.prediction_models.get(property_name, self.default_prediction)
-        value, confidence, details = predictor(compounds, ratios)
-        return {
-            'value': value,
-            'confidence': confidence,
-            'unit': self.get_property_unit(property_name),
-            'details': details,
-            'prediction_method': 'heuristic_estimation'
-        }
 
-    # --- DEFINITIVE FIX: BULLETPROOF HELPER FOR MOLECULAR WEIGHT ---
-    def _get_mw(self, compound) -> float:
-        """
-        BULLETPROOF: Safely gets molecular weight as a float, returning 0.0 on failure.
-        Handles None, empty strings, and non-numeric values gracefully.
-        """
-        mw_val = getattr(compound, 'molecular_weight', None)
-        if mw_val is None:
-            return 0.0
-        try:
-            return float(mw_val)
-        except (ValueError, TypeError):
-            # This catches empty strings '', non-numeric strings, or other invalid types.
-            return 0.0
-
-    # --- PREDICTION MODELS (All now use the bulletproof _get_mw helper) ---
-    def predict_thermal_conductivity(self, compounds: List, ratios: List[float]) -> tuple:
-        base_value, confidence = 0.0, 0.6
-        for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound)
-            if mw == 0.0: continue
-            comp_val = 0.08 + (1 - abs(mw - 300) / 1000) * 0.05
-            base_value += comp_val * ratios[i]
-        details = f"Estimated based on molecular weight of {len(compounds)} compounds."
-        return max(0.05, min(0.2, base_value)), confidence, details
-
-    def predict_viscosity(self, compounds: List, ratios: List[float]) -> tuple:
-        log_viscosity, confidence = 0.0, 0.7
-        for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound)
-            if mw == 0.0: continue
-            log_viscosity += ratios[i] * np.log(max(1.0, mw / 80.0))
-        final_viscosity = np.exp(log_viscosity) if log_viscosity else 10.0
-        details = "Logarithmic mixing rule applied based on molecular weight."
-        return max(1.0, min(100.0, final_viscosity)), confidence, details
-
-    def predict_flash_point(self, compounds: List, ratios: List[float]) -> tuple:
-        flash_point, confidence = 0.0, 0.65
-        for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound)
-            base_fp = 150.0 if mw == 0.0 else 50 + (mw * 0.3)
-            flash_point += base_fp * ratios[i]
-        details = "Weighted average based on molecular weight estimation."
-        return max(50.0, min(300.0, flash_point)), confidence, details
-
-    def predict_specific_heat(self, compounds: List, ratios: List[float]) -> tuple:
-        specific_heat, confidence = 0.0, 0.6
-        for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound)
-            mw_factor = max(0.5, 1000 / mw) if mw > 0 else 1.0
-            specific_heat += (1800.0 * mw_factor) * ratios[i]
-        details = "Estimated based on inverse relationship with molecular weight."
-        return max(1000, min(3000, specific_heat)), confidence, details
-
-    def predict_cost(self, compounds: List, ratios: List[float]) -> tuple:
-        cost, confidence = 0.0, 0.4
-        for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound)
-            if mw == 0.0: continue
-            comp_cost = (5 + (mw / 20)) * (0.5 if mw < 100 else 1.0)
-            cost += comp_cost * ratios[i]
-        details = "Heuristic cost based on molecular weight as a proxy for complexity."
-        return max(1.0, cost), confidence, details
+    def predict_thermal_conductivity(self, formulation: Dict) -> tuple[float, float]:
+        """Predict thermal conductivity in W/m·K"""
+        avg_mw = self._get_average_molecular_weight(formulation)
         
-    def predict_surface_area(self, compounds: List, ratios: List[float]) -> tuple:
-        surface_area, confidence = 0.0, 0.5
-        for i, compound in enumerate(compounds):
-            name = getattr(compound, 'iupac_name', "").lower()
-            if any(term in name for term in ['zeolite', 'mof', 'porous', 'activated']):
-                surface_area += (500 + (hash(name) % 1500)) * ratios[i]
-                confidence = 0.7
+        # Heuristic: Lower MW generally higher thermal conductivity
+        base_value = 0.1 + (500 - avg_mw) / 1000
+        base_value = max(0.05, min(0.8, base_value))
+        
+        # Adjust for composition complexity
+        complexity_factor = self._get_complexity_factor(formulation)
+        final_value = base_value * (1.0 + complexity_factor * 0.2)
+        
+        confidence = 0.7
+        return final_value, confidence
+
+    def predict_viscosity(self, formulation: Dict) -> tuple[float, float]:
+        """Predict viscosity in cP"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        
+        # Heuristic: Higher MW generally higher viscosity
+        base_value = 0.1 + (avg_mw - 50) / 200
+        base_value = max(0.1, min(1000, base_value))
+        
+        # Adjust for molecular complexity
+        complexity_factor = self._get_complexity_factor(formulation)
+        final_value = base_value * (1.0 + complexity_factor * 0.5)
+        
+        confidence = 0.8
+        return final_value, confidence
+
+    def predict_boiling_point(self, formulation: Dict) -> tuple[float, float]:
+        """Predict boiling point in °C"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        
+        # Heuristic: Boiling point generally increases with MW
+        base_value = 50 + (avg_mw - 50) * 2.0
+        base_value = max(-100, min(400, base_value))
+        
+        # Adjust for polarity and hydrogen bonding
+        polarity_factor = self._get_polarity_factor(formulation)
+        final_value = base_value * (1.0 + polarity_factor * 0.3)
+        
+        confidence = 0.75
+        return final_value, confidence
+
+    def predict_flash_point(self, formulation: Dict) -> tuple[float, float]:
+        """Predict flash point in °C"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        
+        # Heuristic: Flash point generally increases with MW
+        base_value = 30 + (avg_mw - 50) * 1.5
+        base_value = max(-50, min(300, base_value))
+        
+        confidence = 0.65
+        return base_value, confidence
+
+    def predict_specific_heat(self, formulation: Dict) -> tuple[float, float]:
+        """Predict specific heat in J/g·K"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        
+        # Heuristic: Lower MW generally higher specific heat
+        base_value = 1.0 + (200 - avg_mw) / 500
+        base_value = max(0.5, min(4.0, base_value))
+        
+        confidence = 0.7
+        return base_value, confidence
+
+    def predict_density(self, formulation: Dict) -> tuple[float, float]:
+        """Predict density in g/mL"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        
+        # Heuristic: Density increases with MW but plateaus
+        base_value = 0.7 + (avg_mw - 50) / 1000
+        base_value = max(0.6, min(1.5, base_value))
+        
+        confidence = 0.8
+        return base_value, confidence
+
+    def predict_surface_tension(self, formulation: Dict) -> tuple[float, float]:
+        """Predict surface tension in mN/m"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        
+        # Heuristic: Surface tension increases with MW
+        base_value = 15 + (avg_mw - 50) / 20
+        base_value = max(10, min(80, base_value))
+        
+        confidence = 0.6
+        return base_value, confidence
+
+    def predict_refractive_index(self, formulation: Dict) -> tuple[float, float]:
+        """Predict refractive index"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        
+        # Heuristic: Refractive index slightly increases with MW
+        base_value = 1.3 + (avg_mw - 50) / 2000
+        base_value = max(1.3, min(1.7, base_value))
+        
+        confidence = 0.7
+        return base_value, confidence
+
+    def predict_dielectric_constant(self, formulation: Dict) -> tuple[float, float]:
+        """Predict dielectric constant"""
+        polarity_factor = self._get_polarity_factor(formulation)
+        
+        # Heuristic: Higher polarity = higher dielectric constant
+        base_value = 2.0 + polarity_factor * 30.0
+        base_value = max(2.0, min(80.0, base_value))
+        
+        confidence = 0.65
+        return base_value, confidence
+
+    def predict_solubility_parameter(self, formulation: Dict) -> tuple[float, float]:
+        """Predict Hansen solubility parameter in MPa^1/2"""
+        avg_mw = self._get_average_molecular_weight(formulation)
+        polarity_factor = self._get_polarity_factor(formulation)
+        
+        # Heuristic: Combination of MW and polarity effects
+        base_value = 15 + (avg_mw - 100) / 100 + polarity_factor * 5
+        base_value = max(10, min(30, base_value))
+        
+        confidence = 0.6
+        return base_value, confidence
+
+    def _get_average_molecular_weight(self, formulation: Dict) -> float:
+        """Calculate average molecular weight of formulation"""
+        total_mass = 0
+        weighted_mw = 0
+        
+        for component in formulation.get('composition', []):
+            mass_frac = component.get('mass_percentage', 0) / 100
+            mw = self._get_mw(component)
+            weighted_mw += mass_frac * mw
+            total_mass += mass_frac
+            
+        return weighted_mw / total_mass if total_mass > 0 else 100
+
+    def _get_mw(self, compound: Dict) -> float:
+        """Safely get molecular weight with robust error handling"""
+        try:
+            mw = compound.get('molecular_weight')
+            if mw is None:
+                return 100.0  # Default fallback
+            
+            # Handle string values
+            if isinstance(mw, str):
+                mw = float(mw.strip()) if mw.strip() else 100.0
+            
+            # Validate range
+            if not (0.1 <= mw <= 100000):
+                return 100.0
+                
+            return float(mw)
+        except (TypeError, ValueError, AttributeError):
+            return 100.0  # Comprehensive fallback
+
+    def _get_complexity_factor(self, formulation: Dict) -> float:
+        """Calculate molecular complexity factor (0-1 scale)"""
+        complexities = []
+        
+        for component in formulation.get('composition', []):
+            # Estimate complexity from SMILES string length and patterns
+            smiles = component.get('smiles', '')
+            if smiles:
+                # Simple heuristic: longer SMILES = more complex
+                comp_score = min(len(smiles) / 50, 1.0)
+                complexities.append(comp_score)
             else:
-                surface_area += (5 + (hash(name) % 20)) * ratios[i]
-        details = "Estimated based on material type (porous vs. non-porous)."
-        return max(1, min(2500, surface_area)), confidence, details
+                complexities.append(0.5)  # Default medium complexity
+        
+        return np.mean(complexities) if complexities else 0.5
 
-    def predict_dielectric_strength(self, compounds: List, ratios: List[float]) -> tuple:
-        value, confidence = 0.0, 0.65
-        for i, c in enumerate(compounds):
-            formula = getattr(c, 'molecular_formula', '')
-            base_ds = 30.0 + (15.0 if 'O' not in formula and 'N' not in formula else 0.0)
-            value += base_ds * ratios[i]
-        return max(20.0, min(60.0, value)), confidence, "Based on chemical structure purity."
-
-    def predict_co2_capacity(self, compounds: List, ratios: List[float]) -> tuple:
-        value, confidence = 0.0, 0.5
-        for i, c in enumerate(compounds):
-            mw = self._get_mw(c)
-            name = getattr(c, 'iupac_name', "").lower()
-            base_cap = 0.5 + (2.0 if 'amine' in name or 'nh' in name else 0.0) + (50 / mw if mw > 0 else 0.0)
-            value += base_cap * ratios[i]
-        return max(0.1, min(5.0, value)), confidence, "Based on amine groups and molecular weight."
-
-    def predict_stability(self, compounds: List, ratios: List[float]) -> tuple:
-        value, confidence = 0.0, 0.6
-        for i, c in enumerate(compounds):
-             mw = self._get_mw(c)
-             base_stab = 0.95 - (mw / 5000)
-             value += base_stab * ratios[i]
-        return max(0.5, min(0.98, value)), confidence, "Based on molecular weight as a proxy for complexity."
-
-    def default_prediction(self, compounds: List, ratios: List[float]) -> tuple:
-        base_value, confidence = 0.5, 0.4
-        for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound)
-            if mw == 0.0: continue
-            base_value += min(1.0, mw / 1000) * ratios[i] * 0.3
-        details = f"Generic prediction based on molecular complexity."
-        return min(1.0, max(0.1, base_value)), confidence, details
-    
-    def get_property_unit(self, property_name: str) -> str:
-        units = { 'thermal_conductivity': 'W/m·K', 'viscosity': 'cSt', 'flash_point': '°C', 'specific_heat': 'J/kg·K', 'dielectric_strength': 'kV/2.5mm', 'cost': '$/kg', 'surface_area': 'm²/g', 'co2_capacity': 'mmol/g', 'stability': 'score (0-1)' }
-        return units.get(property_name, '')
-    
-    def predict_autoignition_temp(self, compounds: List, ratios: List[float]) -> tuple: return 400, 0.3, "Default estimate"
-    def predict_pour_point(self, compounds: List, ratios: List[float]) -> tuple: return -20, 0.3, "Default estimate"
-    def predict_dielectric_constant(self, compounds: List, ratios: List[float]) -> tuple: return 2.5, 0.3, "Default estimate"
-
+    def _get_polarity_factor(self, formulation: Dict) -> float:
+        """Calculate polarity factor based on functional groups"""
+        polarity_scores = []
+        
+        for component in formulation.get('composition', []):
+            smiles = component.get('smiles', '').lower()
+            score = 0.0
+            
+            # Detect polar functional groups
+            polar_groups = [
+                ('o', 0.3),  # Oxygen atoms
+                ('n', 0.4),  # Nitrogen atoms  
+                ('oh', 0.7), # Hydroxyl groups
+                ('c=o', 0.6), # Carbonyl groups
+                ('coo', 0.5), # Ester/carboxyl
+                ('cn', 0.4),  # Nitrile
+                ('cl', 0.2),  # Chlorine
+                ('f', 0.3),   # Fluorine
+            ]
+            
+            for group, group_score in polar_groups:
+                if group in smiles:
+                    score = max(score, group_score)
+            
+            polarity_scores.append(score)
+        
+        return np.mean(polarity_scores) if polarity_scores else 0.3
