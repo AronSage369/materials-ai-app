@@ -22,7 +22,7 @@ class MaterialsAIEngine:
         self.api_key = api_key
         genai.configure(api_key=api_key)
         
-        model_names = ['gemini-2.5-pro', 'gemini-2.5-flash']
+        model_names = ['gemini-1.5-pro-latest', 'gemini-1.5-flash-latest', 'gemini-pro']
         
         for model_name in model_names:
             try:
@@ -77,7 +77,7 @@ class MaterialsAIEngine:
             return strategy
             
         except Exception as e:
-            st.warning(f"⚠️ AI interpretation failed, using default strategy")
+            st.warning(f"⚠️ AI interpretation failed, using default strategy. Error: {e}")
             return self.get_default_strategy(material_type, negotiation_round)
 
     def get_default_strategy(self, material_type: str, negotiation_round: int = 0) -> Dict[str, Any]:
@@ -325,8 +325,9 @@ class MaterialsAIEngine:
             
             # Base + 2 specialists (ternary)
             if len(specialists) >= 2:
-                spec_props = list(specialists())[:2]
-                specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists[prop]]
+                # FIX: Changed specialists() to specialists.keys() to fix TypeError
+                spec_props = list(specialists.keys())[:2]
+                specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists.get(prop)]
                 
                 if len(specialists_compounds) == 2:
                     formulations.append({
@@ -340,8 +341,9 @@ class MaterialsAIEngine:
             
             # Base + 3 specialists (quaternary)
             if len(specialists) >= 3:
-                spec_props = list(specialists())[:3]
-                specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists[prop]]
+                # FIX: Changed specialists() to specialists.keys() to fix TypeError
+                spec_props = list(specialists.keys())[:3]
+                specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists.get(prop)]
                 
                 if len(specialists_compounds) == 3:
                     formulations.append({
@@ -627,6 +629,18 @@ class MaterialsAIEngine:
         if json_match:
             return json_match.group()
         
+        return clean_text
+
+    def extract_json_from_response(self, response_text: str) -> str:
+        # Find the first '{' and the last '}'
+        start_index = response_text.find('{')
+        end_index = response_text.rfind('}')
+        
+        if start_index != -1 and end_index != -1 and end_index > start_index:
+            json_str = response_text[start_index:end_index+1]
+            return json_str
+        
+        # Fallback regex if simple slicing fails
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             return json_match.group()
@@ -647,3 +661,4 @@ class MaterialsAIEngine:
             strategy['safety_constraints'] = ['non_toxic', 'pfas_free']
         
         return strategy
+
