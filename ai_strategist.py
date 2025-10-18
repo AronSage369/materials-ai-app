@@ -1,23 +1,40 @@
 import google.generativeai as genai
 import json
 import re
+import logging
 from typing import Dict, List, Any, Optional
 import numpy as np
+from utils import cached, MemoryManager
 
 class AIStrategist:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.model = None
+        self.logger = logging.getLogger(__name__)
         self.set_api_key(api_key)
         
     def set_api_key(self, api_key: str):
-        """Configure Gemini API"""
+        """Configure Gemini API with error handling"""
         try:
+            if not api_key:
+                raise ValueError("API key cannot be empty")
+                
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            # Try to use the model, fallback to simpler model if needed
+            try:
+                self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                # Test the model with a simple prompt
+                test_response = self.model.generate_content("Test")
+                self.logger.info("Gemini API configured successfully")
+            except Exception as model_error:
+                self.logger.warning(f"Flash model failed, trying pro: {model_error}")
+                self.model = genai.GenerativeModel('gemini-pro')
+                
         except Exception as e:
+            self.logger.error(f"Failed to configure Gemini API: {str(e)}")
             raise Exception(f"Failed to configure Gemini API: {str(e)}")
 
+    @cached
     def think_about_challenge(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
         """Advanced AI thinking about the challenge - generates search strategies, compound classes, and formulation approaches"""
         prompt = f"""
@@ -69,6 +86,9 @@ class AIStrategist:
         """
 
         try:
+            if not self.model:
+                raise Exception("AI model not initialized")
+                
             response = self.model.generate_content(prompt)
             response_text = response.text
             
@@ -79,12 +99,14 @@ class AIStrategist:
                 strategy = json.loads(json_str)
                 return strategy
             else:
+                self.logger.warning("No JSON found in AI response, using fallback")
                 return self._create_fallback_strategy(challenge_text, material_type)
                 
         except Exception as e:
-            print(f"Error in AI thinking: {e}")
+            self.logger.error(f"Error in AI thinking: {e}")
             return self._create_fallback_strategy(challenge_text, material_type)
 
+    @cached
     def predict_property_enhancement(self, formulation: Dict, target_properties: Dict) -> Dict[str, Any]:
         """AI prediction of how formulation modifications might enhance properties"""
         composition = formulation.get('composition', [])
@@ -116,6 +138,9 @@ class AIStrategist:
         """
 
         try:
+            if not self.model:
+                return {}
+                
             response = self.model.generate_content(prompt)
             response_text = response.text
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
@@ -124,9 +149,10 @@ class AIStrategist:
             else:
                 return {}
         except Exception as e:
-            print(f"Error in property enhancement prediction: {e}")
+            self.logger.error(f"Error in property enhancement prediction: {e}")
             return {}
 
+    @cached
     def evaluate_formulation_science(self, formulation: Dict, strategy: Dict) -> Dict[str, Any]:
         """Scientific evaluation of formulation based on computational chemistry principles"""
         composition = formulation.get('composition', [])
@@ -158,6 +184,9 @@ class AIStrategist:
         """
 
         try:
+            if not self.model:
+                return {}
+                
             response = self.model.generate_content(prompt)
             response_text = response.text
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
@@ -166,11 +195,12 @@ class AIStrategist:
             else:
                 return {}
         except Exception as e:
-            print(f"Error in scientific evaluation: {e}")
+            self.logger.error(f"Error in scientific evaluation: {e}")
             return {}
 
     def _create_fallback_strategy(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
         """Fallback strategy when AI thinking fails"""
+        self.logger.info("Using fallback strategy")
         return {
             "scientific_analysis": f"Develop {material_type} for {challenge_text}",
             "key_mechanisms": ["basic functionality"],
