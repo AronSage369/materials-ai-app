@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Optional
 import random
 import time
 from dataclasses import dataclass
+import numpy as np  # Added missing import
 
 @dataclass
 class Compound:
