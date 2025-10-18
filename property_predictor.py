@@ -1,4 +1,4 @@
-# property_predictor.py - ADVANCED PROPERTY PREDICTION (FIXED)
+# property_predictor.py - ADVANCED PROPERTY PREDICTION (DEFINITIVE FIX)
 import numpy as np
 from typing import Dict, List, Any
 import streamlit as st
@@ -22,9 +22,7 @@ class AdvancedPropertyPredictor:
         
     def predict_all_properties(self, formulations: List[Dict], strategy: Dict) -> List[Dict]:
         target_properties = strategy.get('target_properties', {})
-        if not isinstance(target_properties, dict):
-            # Fallback if strategy is malformed
-            return formulations
+        if not isinstance(target_properties, dict): return formulations
 
         for formulation in formulations:
             compounds = formulation.get('compounds', [])
@@ -49,19 +47,26 @@ class AdvancedPropertyPredictor:
             'prediction_method': 'heuristic_estimation'
         }
 
-    # --- FIX: HELPER FOR SAFE MOLECULAR WEIGHT ACCESS ---
+    # --- DEFINITIVE FIX: BULLETPROOF HELPER FOR MOLECULAR WEIGHT ---
     def _get_mw(self, compound) -> float:
-        """Safely gets molecular weight as a float, returning 0.0 on failure."""
+        """
+        BULLETPROOF: Safely gets molecular weight as a float, returning 0.0 on failure.
+        Handles None, empty strings, and non-numeric values gracefully.
+        """
+        mw_val = getattr(compound, 'molecular_weight', None)
+        if mw_val is None:
+            return 0.0
         try:
-            return float(getattr(compound, 'molecular_weight', 0.0))
+            return float(mw_val)
         except (ValueError, TypeError):
+            # This catches empty strings '', non-numeric strings, or other invalid types.
             return 0.0
 
-    # --- PREDICTION MODELS (All now use the safe _get_mw helper) ---
+    # --- PREDICTION MODELS (All now use the bulletproof _get_mw helper) ---
     def predict_thermal_conductivity(self, compounds: List, ratios: List[float]) -> tuple:
         base_value, confidence = 0.0, 0.6
         for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound) # Using safe helper
+            mw = self._get_mw(compound)
             if mw == 0.0: continue
             comp_val = 0.08 + (1 - abs(mw - 300) / 1000) * 0.05
             base_value += comp_val * ratios[i]
@@ -71,7 +76,7 @@ class AdvancedPropertyPredictor:
     def predict_viscosity(self, compounds: List, ratios: List[float]) -> tuple:
         log_viscosity, confidence = 0.0, 0.7
         for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound) # Using safe helper
+            mw = self._get_mw(compound)
             if mw == 0.0: continue
             log_viscosity += ratios[i] * np.log(max(1.0, mw / 80.0))
         final_viscosity = np.exp(log_viscosity) if log_viscosity else 10.0
@@ -81,7 +86,7 @@ class AdvancedPropertyPredictor:
     def predict_flash_point(self, compounds: List, ratios: List[float]) -> tuple:
         flash_point, confidence = 0.0, 0.65
         for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound) # Using safe helper
+            mw = self._get_mw(compound)
             base_fp = 150.0 if mw == 0.0 else 50 + (mw * 0.3)
             flash_point += base_fp * ratios[i]
         details = "Weighted average based on molecular weight estimation."
@@ -90,7 +95,7 @@ class AdvancedPropertyPredictor:
     def predict_specific_heat(self, compounds: List, ratios: List[float]) -> tuple:
         specific_heat, confidence = 0.0, 0.6
         for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound) # Using safe helper
+            mw = self._get_mw(compound)
             mw_factor = max(0.5, 1000 / mw) if mw > 0 else 1.0
             specific_heat += (1800.0 * mw_factor) * ratios[i]
         details = "Estimated based on inverse relationship with molecular weight."
@@ -99,7 +104,7 @@ class AdvancedPropertyPredictor:
     def predict_cost(self, compounds: List, ratios: List[float]) -> tuple:
         cost, confidence = 0.0, 0.4
         for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound) # Using safe helper
+            mw = self._get_mw(compound)
             if mw == 0.0: continue
             comp_cost = (5 + (mw / 20)) * (0.5 if mw < 100 else 1.0)
             cost += comp_cost * ratios[i]
@@ -129,7 +134,7 @@ class AdvancedPropertyPredictor:
     def predict_co2_capacity(self, compounds: List, ratios: List[float]) -> tuple:
         value, confidence = 0.0, 0.5
         for i, c in enumerate(compounds):
-            mw = self._get_mw(c) # Using safe helper
+            mw = self._get_mw(c)
             name = getattr(c, 'iupac_name', "").lower()
             base_cap = 0.5 + (2.0 if 'amine' in name or 'nh' in name else 0.0) + (50 / mw if mw > 0 else 0.0)
             value += base_cap * ratios[i]
@@ -138,7 +143,7 @@ class AdvancedPropertyPredictor:
     def predict_stability(self, compounds: List, ratios: List[float]) -> tuple:
         value, confidence = 0.0, 0.6
         for i, c in enumerate(compounds):
-             mw = self._get_mw(c) # Using safe helper
+             mw = self._get_mw(c)
              base_stab = 0.95 - (mw / 5000)
              value += base_stab * ratios[i]
         return max(0.5, min(0.98, value)), confidence, "Based on molecular weight as a proxy for complexity."
@@ -146,7 +151,7 @@ class AdvancedPropertyPredictor:
     def default_prediction(self, compounds: List, ratios: List[float]) -> tuple:
         base_value, confidence = 0.5, 0.4
         for i, compound in enumerate(compounds):
-            mw = self._get_mw(compound) # Using safe helper
+            mw = self._get_mw(compound)
             if mw == 0.0: continue
             base_value += min(1.0, mw / 1000) * ratios[i] * 0.3
         details = f"Generic prediction based on molecular complexity."
