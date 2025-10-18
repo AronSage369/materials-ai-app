@@ -18,31 +18,31 @@ class AdvancedPropertyPredictor:
         }
         
     def predict_all_properties(self, formulations: List[Dict], 
-                         target_properties: Dict) -> List[Dict]:
-    """Predict all required properties for formulations"""
-    for formulation in formulations:
-        predicted_properties = {}
-        confidence_scores = {}
-        
-        for prop_name in target_properties.keys():
-            if prop_name in self.property_models:
-                try:
-                    value, confidence = self.property_models[prop_name](formulation)
-                    # Ensure we return a numeric value
-                    if value is None or not isinstance(value, (int, float)):
-                        value = 0.0
-                        confidence = 0.1
-                    predicted_properties[prop_name] = value
-                    confidence_scores[prop_name] = confidence
-                except Exception as e:
-                    print(f"Error predicting {prop_name}: {e}")
-                    predicted_properties[prop_name] = 0.0
-                    confidence_scores[prop_name] = 0.0
-        
-        formulation['predicted_properties'] = predicted_properties
-        formulation['prediction_confidence'] = np.mean(list(confidence_scores.values())) if confidence_scores else 0.5
-        
-    return formulations
+                             target_properties: Dict) -> List[Dict]:
+        """Predict all required properties for formulations"""
+        for formulation in formulations:
+            predicted_properties = {}
+            confidence_scores = {}
+            
+            for prop_name in target_properties.keys():
+                if prop_name in self.property_models:
+                    try:
+                        value, confidence = self.property_models[prop_name](formulation)
+                        # Ensure we return a numeric value
+                        if value is None or not isinstance(value, (int, float)):
+                            value = 0.0
+                            confidence = 0.1
+                        predicted_properties[prop_name] = value
+                        confidence_scores[prop_name] = confidence
+                    except Exception as e:
+                        print(f"Error predicting {prop_name}: {e}")
+                        predicted_properties[prop_name] = 0.0
+                        confidence_scores[prop_name] = 0.0
+            
+            formulation['predicted_properties'] = predicted_properties
+            formulation['prediction_confidence'] = np.mean(list(confidence_scores.values())) if confidence_scores else 0.5
+            
+        return formulations
 
     def predict_thermal_conductivity(self, formulation: Dict) -> tuple[float, float]:
         """Predict thermal conductivity in W/m·K"""
