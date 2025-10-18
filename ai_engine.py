@@ -325,7 +325,7 @@ class MaterialsAIEngine:
             
             # Base + 2 specialists (ternary)
             if len(specialists) >= 2:
-                spec_props = list(specialists.keys())[:2]
+                spec_props = list(specialists())[:2]
                 specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists[prop]]
                 
                 if len(specialists_compounds) == 2:
@@ -340,7 +340,7 @@ class MaterialsAIEngine:
             
             # Base + 3 specialists (quaternary)
             if len(specialists) >= 3:
-                spec_props = list(specialists.keys())[:3]
+                spec_props = list(specialists())[:3]
                 specialists_compounds = [specialists[prop][0] for prop in spec_props if specialists[prop]]
                 
                 if len(specialists_compounds) == 3:
