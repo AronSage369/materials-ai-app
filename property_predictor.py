@@ -242,3 +242,68 @@ class AdvancedPropertyPredictor:
             polarity_scores.append(score)
         
         return np.mean(polarity_scores) if polarity_scores else 0.3
+        def predict_mixture_properties(self, formulation: Dict, target_properties: Dict) -> Dict:
+    """Predict properties considering solute-solvent interactions"""
+    base_properties = self.predict_all_properties([formulation], target_properties)[0]['predicted_properties']
+    
+    # Enhance predictions for solute-solvent systems
+    if any(key in formulation for key in ['solvent_components', 'solute_components']):
+        enhanced_properties = self._enhance_solute_solvent_predictions(formulation, base_properties)
+        return enhanced_properties
+    
+    return base_properties
+
+    def _enhance_solute_solvent_predictions(self, formulation: Dict, base_properties: Dict) -> Dict:
+    """Enhance property predictions for solute-solvent systems"""
+    enhanced = base_properties.copy()
+    composition = formulation.get('composition', [])
+    
+    # Get solvent and solute information
+    solvent_cids = set(formulation.get('solvent_components', []))
+    solute_cids = set(formulation.get('solute_components', []))
+    
+    solvents = [comp for comp in composition if comp['cid'] in solvent_cids]
+    solutes = [comp for comp in composition if comp['cid'] in solute_cids]
+    
+    if not solvents or not solutes:
+        return enhanced
+    
+    # Calculate solute concentration
+    solute_concentration = sum(comp['mass_percentage'] for comp in solutes) / 100
+    
+    # Enhance predictions based on solute concentration
+    for prop in enhanced:
+        if prop == 'viscosity':
+            # Solutes generally increase viscosity
+            enhancement = 1 + (solute_concentration * 2)
+            enhanced[prop] *= enhancement
+        
+        elif prop == 'thermal_conductivity':
+            # Solid solutes can increase thermal conductivity
+            if any(self._is_likely_solid(comp) for comp in solutes):
+                enhancement = 1 + (solute_concentration * 0.5)
+                enhanced[prop] *= enhancement
+        
+        elif prop == 'density':
+            # Adjust density based on solute properties
+            avg_solute_mw = np.mean([comp.get('molecular_weight', 100) for comp in solutes])
+            avg_solvent_mw = np.mean([comp.get('molecular_weight', 100) for comp in solvents])
+            
+            if avg_solute_mw > avg_solvent_mw:
+                enhancement = 1 + (solute_concentration * 0.3)
+                enhanced[prop] *= enhancement
+        
+        elif prop == 'surface_tension':
+            # Solutes can affect surface tension
+            enhancement = 1 + (solute_concentration * random.uniform(-0.2, 0.5))
+            enhanced[prop] *= enhancement
+    
+    return enhanced
+
+    def _is_likely_solid(self, compound: Dict) -> bool:
+    """Heuristic to determine if compound is likely solid at room temperature"""
+    mw = compound.get('molecular_weight', 0)
+    complexity = compound.get('complexity', 0)
+    
+    # Simple heuristic: higher MW and complexity often indicate solids
+    return mw > 200 and complexity > 150
