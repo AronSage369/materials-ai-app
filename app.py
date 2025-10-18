@@ -1,9 +1,6 @@
-# app.py - COMPLETELY REWRITTEN WITH PROPER INDENTATION
+# app.py - REWRITTEN WITH ENHANCED UI AND DETAILED RESULT VISUALIZATION
 import streamlit as st
 import pandas as pd
-import numpy as np
-import json
-import time
 from typing import Dict, List, Any
 from ai_engine import MaterialsAIEngine
 from pubchem_manager import PubChemManager
@@ -11,534 +8,244 @@ from mixture_predictor import MixturePredictor
 from compatibility_checker import CompatibilityChecker
 from property_predictor import AdvancedPropertyPredictor
 
-# Configure page
+# --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="🧪 Advanced Materials Discovery AI",
-    page_icon="🧪",
+    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for professional look
+# --- CUSTOM CSS FOR A POLISHED LOOK ---
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.8rem;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 1rem;
-        font-weight: 700;
+    .main-header { font-size: 2.8rem; color: #1f77b4; text-align: center; margin-bottom: 1rem; font-weight: 700; }
+    .sub-header { font-size: 1.4rem; color: #2e86ab; margin-bottom: 2rem; text-align: center; }
+    .result-card { 
+        padding: 1.5rem; 
+        border-radius: 10px; 
+        border-left: 6px solid #1f77b4; 
+        background-color: #ffffff; 
+        margin-bottom: 1.5rem; 
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transition: all 0.2s ease-in-out;
     }
-    .sub-header {
-        font-size: 1.4rem;
-        color: #2e86ab;
-        margin-bottom: 2rem;
-        text-align: center;
-    }
-    .result-card {
-        padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 5px solid #1f77b4;
-        background-color: #f8f9fa;
-        margin: 1rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .property-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        margin: 0.25rem;
-        background-color: #e3f2fd;
-        border-radius: 15px;
-        font-size: 0.85rem;
-        border: 1px solid #bbdefb;
-    }
-    .approved-badge {
-        background-color: #e8f5e8;
-        color: #2e7d32;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-weight: 600;
-    }
-    .rejected-badge {
-        background-color: #ffebee;
-        color: #c62828;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-weight: 600;
-    }
-    .negotiation-badge {
-        background-color: #fff3e0;
-        color: #ef6c00;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-weight: 600;
-    }
+    .result-card:hover { transform: translateY(-3px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+    .approved-badge { background-color: #e8f5e9; color: #2e7d32; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 600; border: 1px solid #a5d6a7; }
+    .rejected-badge { background-color: #ffebee; color: #c62828; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 600; border: 1px solid #ef9a9a; }
+    .stButton>button { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
 
 class AdvancedMaterialsApp:
     def __init__(self):
-        self.ai_engine = MaterialsAIEngine()
-        self.pubchem_manager = PubChemManager()
-        self.mixture_predictor = MixturePredictor()
-        self.compatibility_checker = CompatibilityChecker()
-        self.property_predictor = AdvancedPropertyPredictor()
+        # Initialize all modules in session state for persistence
+        if 'ai_engine' not in st.session_state:
+            st.session_state.ai_engine = MaterialsAIEngine()
+            st.session_state.pubchem_manager = PubChemManager()
+            st.session_state.mixture_predictor = MixturePredictor()
+            st.session_state.compatibility_checker = CompatibilityChecker()
+            st.session_state.property_predictor = AdvancedPropertyPredictor()
+    
+    # Use properties for easy access to modules
+    @property
+    def ai_engine(self): return st.session_state.ai_engine
+    @property
+    def pubchem_manager(self): return st.session_state.pubchem_manager
+    @property
+    def mixture_predictor(self): return st.session_state.mixture_predictor
+    @property
+    def compatibility_checker(self): return st.session_state.compatibility_checker
+    @property
+    def property_predictor(self): return st.session_state.property_predictor
         
-    def render_sidebar(self):
-        """Render configuration sidebar"""
+    def render_sidebar(self) -> Dict:
+        """Renders the sidebar for configuration and returns the config dictionary."""
         with st.sidebar:
             st.header("⚙️ AI Configuration")
-            
-            # Gemini API Key input
-            gemini_key = st.text_input(
-                "🔑 Enter Gemini API Key:",
-                type="password",
-                help="Get your API key from: https://aistudio.google.com/app/apikey"
-            )
-            
-            if gemini_key:
+            gemini_key = st.text_input("🔑 Enter Gemini API Key:", type="password", help="Get your API key from Google AI Studio")
+            if gemini_key: 
                 st.session_state.gemini_key = gemini_key
-                st.success("✅ API Key saved!")
-            elif not hasattr(st.session_state, 'gemini_key'):
-                st.warning("⚠️ Please enter Gemini API key to continue")
-            
+                self.ai_engine.set_api_key(gemini_key)
+
             st.markdown("---")
-            
-            # Search configuration
             st.subheader("🔍 Search Parameters")
-            max_compounds = st.slider("Maximum compounds to analyze", 10, 200, 50)
-            search_depth = st.selectbox(
-                "Search depth", 
-                ["Quick Scan", "Standard Analysis", "Comprehensive Search"],
-                index=1
-            )
-            
-            # Material type
-            material_type = st.selectbox(
-                "Material Category",
-                [
-                    "Coolant/Lubricant", "Adsorbent", "Catalyst", 
-                    "Polymer", "Battery Material", "Pharmaceutical",
-                    "Cosmetic", "Agricultural", "Custom"
-                ]
-            )
-            
-            # Advanced options
-            with st.expander("Advanced Options"):
-                min_confidence = st.slider("Minimum confidence threshold", 0.1, 1.0, 0.7)
-                max_negotiation_rounds = st.slider("Max negotiation rounds", 1, 10, 3)
-                enable_compatibility = st.checkbox("Enable compatibility checking", True)
-                enable_mixture_prediction = st.checkbox("Enable mixture prediction", True)
-                enable_mole_calculations = st.checkbox("Enable mole percentage calculations", True)
-                max_approved_formulations = st.slider("Max approved formulations to show", 10, 30, 20)
-            
-            return {
-                'gemini_key': gemini_key,
-                'max_compounds': max_compounds,
-                'search_depth': search_depth,
-                'material_type': material_type,
-                'min_confidence': min_confidence,
-                'max_negotiation_rounds': max_negotiation_rounds,
-                'enable_compatibility': enable_compatibility,
-                'enable_mixture_prediction': enable_mixture_prediction,
-                'enable_mole_calculations': enable_mole_calculations,
-                'max_approved_formulations': max_approved_formulations
+            config = {
+                'max_compounds': st.slider("Max Compounds to Analyze", 10, 200, 50, 10),
+                'search_depth': st.select_slider("Search Depth", ["Quick", "Standard", "Comprehensive"], value="Standard"),
+                'material_type': st.selectbox("Material Category", ["Coolant/Lubricant", "Adsorbent"]),
+                'gemini_key': st.session_state.get('gemini_key')
             }
-    
-    def render_main_interface(self):
-        """Render main input interface"""
-        st.markdown('<h1 class="main-header">🧪 Advanced Materials Discovery AI</h1>', unsafe_allow_html=True)
-        st.markdown('<div class="sub-header">Multi-Agent Adaptive Formulation System</div>', unsafe_allow_html=True)
-        
-        # Two-column layout
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.subheader("📝 Challenge Description")
-            challenge_text = st.text_area(
-                "Describe your materials challenge in detail:",
-                height=200,
-                placeholder="""Example: Need an immersion cooling fluid for data centers with:
-• Flash point ≥ 200°C, auto-ignition temperature > 300°C
-• Kinematic viscosity: 3-8 cSt at 100°C, < 30 cSt at 40°C  
-• Thermal conductivity > 0.13 W/m·K, specific heat > 2000 J/kg·K
-• Dielectric constant > 2.2, dielectric strength > 35 kV/2.5mm
-• PFAS-free, non-toxic, biodegradable
-• Material compatible with copper, aluminum, plastics
-• Long-term stability at 60-80°C operating temperature
-• Cost < $50/kg, readily available globally"""
-            )
-        
-        with col2:
-            st.subheader("🎯 Advanced Features")
-            st.info("""
-            **New AI Capabilities:**
-            - Multi-Agent System (5 specialized agents)
-            - Adaptive Negotiation (progressive relaxation)
-            - Mole Percentage Calculations
-            - Complex Formulations (3-5 compounds)
-            - Advanced Property Prediction
-            - Both Approved & Rejected Results
-            """)
             
-            st.markdown("**Expected Output:**")
-            st.write("• Multi-round negotiation results")
-            st.write("• Complex formulations (3-5 compounds)")
-            st.write("• Mole percentage compositions")
-            st.write("• Advanced property predictions")
-            st.write("• Up to 20 approved formulations")
+            with st.expander("🔬 Advanced Options", expanded=True):
+                config.update({
+                    'min_confidence': st.slider("Min Approval Score", 0.1, 1.0, 0.5, 0.05),
+                    'max_negotiation_rounds': st.slider("Max Negotiation Rounds", 1, 10, 3),
+                    'max_approved_formulations': st.slider("Max Formulations to Show", 5, 30, 15)
+                })
+            return config
+    
+    def render_main_interface(self) -> str:
+        """Renders the main part of the UI for user input."""
+        st.markdown('<h1 class="main-header">🧪 Advanced Materials Discovery AI</h1>', unsafe_allow_html=True)
+        st.markdown('<p class="sub-header">Multi-Agent Adaptive Formulation System</p>', unsafe_allow_html=True)
         
+        challenge_text = st.text_area("📝 **Challenge Description**", height=150, 
+                                      placeholder="Example: Design a non-toxic, biodegradable coolant for data centers with a thermal conductivity > 0.15 W/mK and a flash point > 200°C...")
         return challenge_text
     
-    def run_analysis(self, challenge_text, config):
-        """Run adaptive multi-round analysis with negotiation"""
-        if not config['gemini_key']:
-            st.error("❌ Please enter your Gemini API key in the sidebar")
-            return None
-        
-        try:
-            self.ai_engine.set_api_key(config['gemini_key'])
-            
-            all_results = []
-            max_rounds = config['max_negotiation_rounds']
-            
-            for round_num in range(max_rounds):
-                st.write(f"---")
-                st.subheader(f"🔄 Negotiation Round {round_num + 1}")
-                
-                # Phase 1: Adaptive challenge interpretation
-                with st.spinner(f"Round {round_num + 1}: AI interpreting challenge..."):
-                    strategy = self.ai_engine.interpret_challenge(challenge_text, config['material_type'], round_num)
-                
-                # Phase 2: Compound discovery
-                with st.spinner(f"Round {round_num + 1}: Exploring chemical space..."):
-                    compounds_data = self.pubchem_manager.find_compounds(
-                        strategy, 
-                        config['max_compounds'],
-                        config['search_depth']
-                    )
-                
-                # Phase 3: Multi-agent formulation generation
-                with st.spinner(f"Round {round_num + 1}: Multi-agent formulation generation..."):
-                    formulations = self.ai_engine.multi_agent_formulation_generation(compounds_data, strategy)
-                
-                # Phase 4: Calculate mole percentages if enabled
-                if config['enable_mole_calculations'] and formulations:
-                    with st.spinner(f"Round {round_num + 1}: Calculating mole percentages..."):
-                        formulations = self.ai_engine.calculate_mole_percentages(formulations)
-                
-                # Phase 5: Advanced property prediction
-                if config['enable_mixture_prediction'] and formulations:
-                    with st.spinner(f"Round {round_num + 1}: Predicting mixture properties..."):
-                        formulations = self.property_predictor.predict_all_properties(formulations, strategy)
-                
-                # Phase 6: Compatibility checking
-                if config['enable_compatibility'] and formulations:
-                    with st.spinner(f"Round {round_num + 1}: Validating chemical compatibility..."):
-                        formulations = self.compatibility_checker.validate_all_formulations(formulations)
-                
-                # Phase 7: Adaptive evaluation
-                with st.spinner(f"Round {round_num + 1}: AI evaluation and ranking..."):
-                    round_results = self.ai_engine.adaptive_evaluation(
-                        formulations, strategy, config['min_confidence'], round_num
-                    )
-                
-                all_results.append(round_results)
-                
-                # Check if we have enough approved formulations
-                approved_count = len(round_results.get('approved_formulations', []))
-                if approved_count >= 10 or round_num == max_rounds - 1:
-                    st.success(f"✅ Completed {round_num + 1} negotiation rounds with {approved_count} approved formulations")
-                    break
-                else:
-                    st.warning(f"⚠️ Only {approved_count} approved formulations. Starting next negotiation round...")
-            
-            # Combine results from all rounds
-            final_results = self.combine_negotiation_results(all_results, config)
-            return final_results
-            
-        except Exception as e:
-            st.error(f"❌ Analysis failed: {str(e)}")
-            st.info("💡 Try reducing the number of compounds or using Quick Scan mode")
-            return None
+    def run_full_analysis(self, challenge_text: str, config: Dict) -> Dict:
+        """Orchestrates the entire multi-round analysis pipeline."""
+        final_results = {'approved_formulations': [], 'rejected_formulations': [], 'search_metrics': {}, 'strategy': {}}
+        all_approved_this_run = []
 
-    def combine_negotiation_results(self, all_results, config):
-        """Combine results from all negotiation rounds with improved filtering"""
-        all_approved = []
-        all_rejected = []
-        total_metrics = {
-            'compounds_evaluated': 0,
-            'formulations_generated': 0,
-            'formulations_approved': 0,
-            'negotiation_rounds': len(all_results)
-        }
-        
-        for result in all_results:
-            all_approved.extend(result.get('approved_formulations', []))
-            all_rejected.extend(result.get('rejected_formulations', []))
-            
-            metrics = result.get('search_metrics', {})
-            total_metrics['compounds_evaluated'] += metrics.get('compounds_evaluated', 0)
-            total_metrics['formulations_generated'] += metrics.get('formulations_generated', 0)
-            total_metrics['formulations_approved'] += metrics.get('formulations_approved', 0)
-        
-        # Remove duplicates and sort by score
-        all_approved = self.remove_duplicate_formulations(all_approved)
-        all_rejected = self.remove_duplicate_formulations(all_rejected)
-        
-        all_approved.sort(key=lambda x: x.get('score', 0), reverse=True)
-        all_rejected.sort(key=lambda x: x.get('score', 0), reverse=True)
-        
-        # Enhanced: Show up to configurable number of approved formulations
-        max_approved = config.get('max_approved_formulations', 20)
-        if len(all_approved) > max_approved:
-            # Keep top N by score (which already considers confidence)
-            all_approved = all_approved[:max_approved]
-            st.info(f"📊 Showing top {max_approved} approved formulations (filtered by confidence score)")
-        
-        # Enhanced: Show more rejected for analysis
-        top_rejected = all_rejected[:15]
+        with st.status("🚀 Launching Multi-Agent Analysis...", expanded=True) as status:
+            for round_num in range(config['max_negotiation_rounds']):
+                status.write(f"**🔄 Starting Negotiation Round {round_num + 1} of {config['max_negotiation_rounds']}...**")
+                
+                strategy = self.ai_engine.interpret_challenge(challenge_text, config['material_type'], round_num)
+                compounds = self.pubchem_manager.find_compounds(strategy, config['max_compounds'], config['search_depth'])
+                formulations = self.ai_engine.multi_agent_formulation_generation(compounds, strategy)
+                
+                formulations = self.ai_engine.calculate_mole_percentages(formulations)
+                formulations = self.property_predictor.predict_all_properties(formulations, strategy)
+                formulations = self.compatibility_checker.validate_all_formulations(formulations)
+                
+                round_results = self.ai_engine.adaptive_evaluation(formulations, strategy, config['min_confidence'], round_num)
+                
+                approved_this_round = round_results.get('approved_formulations', [])
+                all_approved_this_run.extend(approved_this_round)
+                
+                status.write(f"✅ Round {round_num + 1} complete. Found {len(approved_this_round)} new approved formulations.")
+
+                if len(all_approved_this_run) >= config['max_approved_formulations']:
+                    status.update(label="✅ Analysis complete: Target reached.", state="complete")
+                    break
+            else:
+                status.update(label="✅ Analysis complete: All rounds finished.", state="complete")
+
+        return self.combine_negotiation_results(all_approved_this_run, config, round_results.get('strategy', {}))
+
+    def combine_negotiation_results(self, all_approved, config, final_strategy):
+        """Consolidates results from all rounds into a final report."""
+        unique_approved = self.ai_engine._remove_duplicate_formulations(all_approved)
+        unique_approved.sort(key=lambda x: x.get('score', 0), reverse=True)
         
         return {
-            'approved_formulations': all_approved,
-            'rejected_formulations': top_rejected,
-            'search_metrics': total_metrics,
-            'strategy': all_results[-1].get('strategy', {}) if all_results else {},
-            'negotiation_summary': f"Completed {len(all_results)} rounds with {len(all_approved)} approved formulations"
+            'approved_formulations': unique_approved[:config['max_approved_formulations']],
+            'strategy': final_strategy,
+            'search_metrics': {
+                'formulations_generated': len(unique_approved),
+                'negotiation_rounds': config['max_negotiation_rounds']
+            }
         }
 
-    def remove_duplicate_formulations(self, formulations):
-        """Remove duplicate formulations"""
-        seen = set()
-        unique = []
-        
-        for formulation in formulations:
-            if 'compounds' in formulation:
-                cids = tuple(sorted([getattr(c, 'cid', 'unknown') for c in formulation['compounds']]))
-                if cids not in seen:
-                    seen.add(cids)
-                    unique.append(formulation)
-        
-        return unique
+    def display_results(self, results: Dict):
+        """Renders the final results report in the main UI."""
+        st.markdown("---")
+        st.header("📊 Final Report")
 
-    def display_results(self, results, config):
-        """Display comprehensive results with both approved and rejected formulations"""
-        
-        st.success(f"✅ {results.get('negotiation_summary', 'Analysis complete!')}")
-        
-        # Summary metrics
-        col1, col2, col3, col4 = st.columns(4)
-        metrics = results.get('search_metrics', {})
-        with col1:
-            st.metric("Compounds Analyzed", metrics.get('compounds_evaluated', 0))
-        with col2:
-            st.metric("Formulations Generated", metrics.get('formulations_generated', 0))
-        with col3:
-            st.metric("Approved Formulations", metrics.get('formulations_approved', 0))
-        with col4:
-            st.metric("Negotiation Rounds", metrics.get('negotiation_rounds', 1))
-        
-        # Strategy overview
-        with st.expander("📋 Final AI Strategy Overview", expanded=True):
-            strategy = results.get('strategy', {})
-            st.write(f"**Material Class:** {strategy.get('material_class', 'Custom')}")
-            st.write("**Final Target Properties:**")
-            for prop, criteria in strategy.get('target_properties', {}).items():
-                st.write(f"- {prop}: {criteria}")
-        
-        # Approved formulations
+        strategy = results.get('strategy', {})
+        if strategy and isinstance(strategy, dict):
+            with st.expander("📋 Final AI Strategy Overview", expanded=False):
+                st.write(f"**Material Class:** `{strategy.get('material_class', 'N/A')}`")
+                target_props = strategy.get('target_properties', {})
+                if target_props and isinstance(target_props, dict):
+                    st.write("**🎯 Final Target Properties:**")
+                    prop_df = pd.DataFrame.from_dict(target_props, orient='index').fillna('-')
+                    st.dataframe(prop_df, use_container_width=True)
+
         approved = results.get('approved_formulations', [])
-        if approved:
-            st.subheader(f"✅ Approved Formulations ({len(approved)} total)")
-            st.info("These formulations met all criteria and are recommended for further development.")
-            
-            for i, formulation in enumerate(approved):
-                self.display_formulation_card(i, formulation, config, approved=True)
+        st.subheader(f"✅ Top {len(approved)} Approved Formulations")
+
+        if not approved:
+            st.warning("No formulations met the final approval criteria. Try relaxing the search parameters.")
         else:
-            st.warning("❌ No formulations met the approval criteria")
-        
-        # Show rejected formulations with explanations
-        rejected = results.get('rejected_formulations', [])
-        if rejected:
-            st.subheader("⚠️ Promising Rejected Formulations")
-            st.info("""
-            These formulations showed promise but didn't meet all criteria. 
-            They may be valuable for further investigation with relaxed requirements.
-            """)
-            
-            for i, formulation in enumerate(rejected):
-                self.display_formulation_card(i, formulation, config, approved=False)
+            for i, formulation in enumerate(approved):
+                self.display_formulation_card(i, formulation)
     
-    def display_formulation_card(self, index, formulation, config, approved=True):
-        """Display formulation card with approval status and mole percentages"""
-        
-        status_color = "✅" if approved else "⚠️"
-        status_text = "APPROVED" if approved else "REJECTED"
-        status_class = "approved-badge" if approved else "rejected-badge"
+    def display_formulation_card(self, index: int, f: Dict):
+        """IMPROVED: Renders a detailed, visually rich card for a single formulation."""
+        status_badge = "approved-badge"
+        status_text = "APPROVED"
         
         with st.container():
             st.markdown(f'<div class="result-card">', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns([4, 1, 1.2])
+            with c1:
+                st.subheader(f'Formulation #{index + 1}')
+                st.caption(f"**Agent:** {f.get('agent', 'N/A')} | **Found in Round:** {f.get('negotiation_round', 0) + 1} | **Risk Level:** {f.get('risk_level', 'N/A').title()}")
+            with c2:
+                st.metric("Score", f"{f.get('score', 0):.2f}")
+            with c3:
+                st.markdown(f'<div style="margin-top: 1.5rem; text-align: center;" class="{status_badge}">{status_text}</div>', unsafe_allow_html=True)
+
+            tab1, tab2, tab3 = st.tabs(["**Composition**", "**Predicted Properties**", "**AI Analysis**"])
             
-            # Header with status and agent info
-            col1, col2, col3 = st.columns([3, 1, 1])
-            
-            with col1:
-                st.subheader(f"{status_color} Formulation #{index + 1}")
-                agent = formulation.get('agent', 'unknown').capitalize()
-                negotiation_round = formulation.get('negotiation_round', 0) + 1
-                st.write(f"**Agent:** {agent} | **Round:** {negotiation_round} | **Risk:** {formulation.get('risk_level', 'medium').capitalize()}")
-            
-            with col2:
-                score = formulation.get('score', 0)
-                st.metric("Overall Score", f"{score:.2f}")
-            
-            with col3:
-                st.markdown(f'<div class="{status_class}">{status_text}</div>', unsafe_allow_html=True)
-            
-            # Compounds and ratios
-            compounds = formulation.get('compounds', [])
-            ratios = formulation.get('ratios', [])
-            mole_ratios = formulation.get('mole_ratios', [])
-            
-            st.write("**Composition:**")
-            
-            # Create columns for compounds
-            comp_cols = st.columns(len(compounds))
-            
-            for idx, compound in enumerate(compounds):
-                with comp_cols[idx]:
-                    # Basic compound info
-                    if hasattr(compound, 'iupac_name'):
-                        comp_name = compound.iupac_name
-                        # Shorten long names
-                        if len(comp_name) > 30:
-                            comp_name = comp_name[:27] + "..."
-                        st.write(f"**{comp_name}**")
-                    else:
-                        st.write(f"**Compound {idx + 1}**")
-                    
-                    if hasattr(compound, 'cid'):
-                        st.write(f"CID: {compound.cid}")
-                    
-                    if hasattr(compound, 'molecular_formula'):
-                        st.write(f"Formula: {compound.molecular_formula}")
-                    
-                    if hasattr(compound, 'molecular_weight'):
-                        st.write(f"MW: {compound.molecular_weight:.1f} g/mol")
-                    
-                    # Mass percentage
-                    if idx < len(ratios):
-                        mass_pct = ratios[idx] * 100
-                        st.write(f"**Mass: {mass_pct:.1f}%**")
-                    
-                    # Mole percentage if available
-                    if config['enable_mole_calculations'] and idx < len(mole_ratios):
-                        mole_pct = mole_ratios[idx] * 100
-                        st.write(f"**Moles: {mole_pct:.1f}%**")
-            
-            # Predicted properties
-            st.write("**Predicted Properties:**")
-            props = formulation.get('predicted_properties', {})
-            prop_text = ""
-            for prop, value in props.items():
-                if isinstance(value, dict):
-                    val = value.get('value', 'N/A')
-                    unit = value.get('unit', '')
-                    confidence = value.get('confidence', 0)
-                    prop_text += f"<span class='property-badge'>{prop}: {val} {unit} (conf: {confidence:.1%})</span>"
-                else:
-                    prop_text += f"<span class='property-badge'>{prop}: {value}</span>"
-            st.markdown(prop_text, unsafe_allow_html=True)
-            
-            # AI Decision details
-            decision = formulation.get('ai_decision', {})
-            if decision.get('reasons'):
-                st.write("**AI Analysis:**")
-                for reason in decision.get('reasons', []):
-                    st.write(f"- {reason}")
-            
-            # Compatibility info
-            feasibility = formulation.get('feasibility', {})
-            if feasibility.get('compatibility_issues'):
-                st.write("**⚠️ Compatibility Notes:**")
-                for issue in feasibility.get('compatibility_issues', []):
-                    st.write(f"- {issue}")
-            
+            with tab1:
+                self._render_composition_tab(f)
+            with tab2:
+                self._render_properties_tab(f)
+            with tab3:
+                self._render_analysis_tab(f)
             st.markdown('</div>', unsafe_allow_html=True)
+            
+    def _render_composition_tab(self, f: Dict):
+        compounds = f.get('compounds', [])
+        mass_ratios = f.get('ratios', [])
+        mole_ratios = f.get('mole_ratios', [])
+        
+        comp_data = []
+        for i, c in enumerate(compounds):
+            comp_data.append({
+                "Compound": getattr(c, 'iupac_name', f'Unknown (CID: {getattr(c, "cid", "N/A")})'),
+                "Mass %": f"{mass_ratios[i]*100:.1f}%" if mass_ratios else "-",
+                "Mole %": f"{mole_ratios[i]*100:.1f}%" if mole_ratios else "-",
+                "MW (g/mol)": getattr(c, 'molecular_weight', '-'),
+                "Formula": f"`{getattr(c, 'molecular_formula', '-')}`"
+            })
+        st.table(pd.DataFrame(comp_data))
+
+    def _render_properties_tab(self, f: Dict):
+        props = f.get('predicted_properties', {})
+        if not props:
+            st.info("No properties were predicted for this formulation.")
+            return
+        
+        prop_list = []
+        for prop, data in props.items():
+            value = data.get('value', 'N/A')
+            unit = data.get('unit', '')
+            conf = data.get('confidence', 0)
+            prop_list.append(f"**{prop.replace('_', ' ').title()}:** `{value:.3f} {unit}` (Confidence: {conf:.0%})")
+        st.markdown("\n\n".join(f"- {p}" for p in prop_list))
+
+    def _render_analysis_tab(self, f: Dict):
+        ai_decision = f.get('ai_decision', {})
+        reasons = ai_decision.get('reasons', [])
+        st.info(f"**Summary:** {' | '.join(reasons)}")
+
+        issues = f.get('feasibility', {}).get('compatibility_issues', [])
+        if issues:
+            st.error(f"**Potential Compatibility Issues:** {', '.join(issues)}")
+        else:
+            st.success("**Compatibility Check:** No major issues identified.")
 
 def main():
     app = AdvancedMaterialsApp()
-    
-    # Render sidebar and get configuration
     config = app.render_sidebar()
-    
-    # Render main interface and get challenge
     challenge_text = app.render_main_interface()
     
-    # Analysis button
-    st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        analyze_btn = st.button(
-            "🚀 START ADVANCED MULTI-AGENT ANALYSIS", 
-            type="primary", 
-            use_container_width=True,
-            disabled=not config['gemini_key']
-        )
-    
-    # Run analysis when button clicked
-    if analyze_btn and challenge_text:
-        with st.spinner("🚀 Starting advanced multi-agent materials analysis..."):
-            results = app.run_analysis(challenge_text, config)
-            
-            if results:
-                app.display_results(results, config)
-    
-    elif analyze_btn and not challenge_text:
-        st.warning("⚠️ Please enter a challenge description first")
-    
-    # Examples section
-    with st.expander("💡 Example Challenges", expanded=False):
-        tab1, tab2, tab3 = st.tabs(["Coolant", "Adsorbent", "Catalyst"])
-        
-        with tab1:
-            st.code("""
-Need immersion cooling fluid for AI data centers:
-- Flash point ≥ 200°C, auto-ignition temperature > 300°C
-- Kinematic viscosity: 3-8 cSt at 100°C, < 30 cSt at 40°C  
-- Thermal conductivity > 0.13 W/m·K, specific heat > 2000 J/kg·K
-- Dielectric constant > 2.2, dielectric strength > 35 kV/2.5mm
-- PFAS-free, non-toxic, biodegradable
-- Material compatible with copper, aluminum, plastics
-- Long-term stability at 60-80°C operating temperature
-- Cost < $50/kg, readily available globally
-            """)
-        
-        with tab2:
-            st.code("""
-Need porous adsorbent for CO2 capture from flue gas:
-- Surface area > 1500 m²/g, pore volume > 0.8 cm³/g
-- CO2 adsorption capacity > 3 mmol/g at 25°C, 1 bar
-- CO2/N2 selectivity > 50, fast adsorption kinetics
-- Stable in humid conditions (10-90% RH)
-- Low regeneration energy < 2 MJ/kg CO2
-- Mechanical strength for pelletization
-- Stable for > 10,000 adsorption-desorption cycles
-- Raw material cost < $20/kg
-            """)
-        
-        with tab3:
-            st.code("""
-Need heterogeneous catalyst for hydrogen production:
-- High activity for water splitting reaction
-- Turnover frequency > 10 s⁻¹ at 1.23 V vs RHE
-- Overpotential < 200 mV at 10 mA/cm²
-- Stability > 1000 hours in acidic/alkaline conditions
-- Earth-abundant elements (no precious metals)
-- Easy synthesis and scale-up
-- Cost < $100/kg catalyst
-- High selectivity (>99%) for hydrogen production
-            """)
+    if st.button("🚀 START ANALYSIS", use_container_width=True, disabled=not config.get('gemini_key')):
+        if challenge_text:
+            results = app.run_full_analysis(challenge_text, config)
+            st.session_state.results = results
+        else:
+            st.warning("⚠️ Please enter a challenge description first.")
+
+    if 'results' in st.session_state:
+        app.display_results(st.session_state.results)
 
 if __name__ == "__main__":
     main()
+
