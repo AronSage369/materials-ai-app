@@ -258,40 +258,50 @@ class AdvancedMaterialsApp:
             st.info("💡 Try reducing the number of compounds or using Quick Scan mode")
             return None
 
-    def combine_negotiation_results(self, all_results: List[Dict]) -> Dict[str, Any]:
-        """Combine results from all negotiation rounds"""
-        all_approved = []
-        all_rejected = []
-        total_metrics = {
-            'compounds_evaluated': 0,
-            'formulations_generated': 0,
-            'formulations_approved': 0,
-            'negotiation_rounds': len(all_results)
-        }
+   def combine_negotiation_results(self, all_results: List[Dict]) -> Dict[str, Any]:
+    """Combine results from all negotiation rounds with improved filtering"""
+    all_approved = []
+    all_rejected = []
+    total_metrics = {
+        'compounds_evaluated': 0,
+        'formulations_generated': 0,
+        'formulations_approved': 0,
+        'negotiation_rounds': len(all_results)
+    }
+    
+    for result in all_results:
+        all_approved.extend(result.get('approved_formulations', []))
+        all_rejected.extend(result.get('rejected_formulations', []))
         
-        for result in all_results:
-            all_approved.extend(result.get('approved_formulations', []))
-            all_rejected.extend(result.get('rejected_formulations', []))
-            
-            metrics = result.get('search_metrics', {})
-            total_metrics['compounds_evaluated'] += metrics.get('compounds_evaluated', 0)
-            total_metrics['formulations_generated'] += metrics.get('formulations_generated', 0)
-            total_metrics['formulations_approved'] += metrics.get('formulations_approved', 0)
-        
-        # Remove duplicates and sort
-        all_approved = self.remove_duplicate_formulations(all_approved)
-        all_rejected = self.remove_duplicate_formulations(all_rejected)
-        
-        all_approved.sort(key=lambda x: x.get('score', 0), reverse=True)
-        all_rejected.sort(key=lambda x: x.get('score', 0), reverse=True)
-        
-        return {
-            'approved_formulations': all_approved[:10],
-            'rejected_formulations': all_rejected[:10],  # Show more rejected for analysis
-            'search_metrics': total_metrics,
-            'strategy': all_results[-1].get('strategy', {}) if all_results else {},
-            'negotiation_summary': f"Completed {len(all_results)} rounds with {len(all_approved)} total approved"
-        }
+        metrics = result.get('search_metrics', {})
+        total_metrics['compounds_evaluated'] += metrics.get('compounds_evaluated', 0)
+        total_metrics['formulations_generated'] += metrics.get('formulations_generated', 0)
+        total_metrics['formulations_approved'] += metrics.get('formulations_approved', 0)
+    
+    # Remove duplicates and sort by score
+    all_approved = self.remove_duplicate_formulations(all_approved)
+    all_rejected = self.remove_duplicate_formulations(all_rejected)
+    
+    all_approved.sort(key=lambda x: x.get('score', 0), reverse=True)
+    all_rejected.sort(key=lambda x: x.get('score', 0), reverse=True)
+    
+    # ENHANCED: Show up to 20 approved formulations
+    # If more than 20 approved, filter by confidence threshold
+    if len(all_approved) > 20:
+        # Keep top 20 by score (which already considers confidence)
+        all_approved = all_approved[:20]
+        st.info(f"📊 Showing top 20 approved formulations from {len(all_approved)} total (filtered by confidence)")
+    
+    # ENHANCED: Show more rejected for analysis (up to 15)
+    top_rejected = all_rejected[:15]
+    
+    return {
+        'approved_formulations': all_approved,
+        'rejected_formulations': top_rejected,
+        'search_metrics': total_metrics,
+        'strategy': all_results[-1].get('strategy', {}) if all_results else {},
+        'negotiation_summary': f"Completed {len(all_results)} rounds with {len(all_approved)} approved formulations"
+    }
 
     def remove_duplicate_formulations(self, formulations: List[Dict]) -> List[Dict]:
         """Remove duplicate formulations"""
@@ -527,3 +537,4 @@ Need heterogeneous catalyst for hydrogen production:
 
 if __name__ == "__main__":
     main()
+
