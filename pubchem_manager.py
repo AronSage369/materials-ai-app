@@ -125,21 +125,30 @@ class PubChemManager:
         terms = []
         
         for prop, criteria in target_props.items():
+            if not isinstance(criteria, dict):
+                continue
+                
             if prop == 'thermal_conductivity':
-                if criteria.get('min', 0) > 0.5:
+                min_val = criteria.get('min')
+                if min_val is not None and min_val > 0.5:
                     terms.extend(['high thermal conductivity', 'thermally conductive'])
             elif prop == 'viscosity':
-                if criteria.get('max', 100) < 10:
+                max_val = criteria.get('max')
+                min_val = criteria.get('min')
+                if max_val is not None and max_val < 10:
                     terms.extend(['low viscosity', 'mobile liquid'])
-                elif criteria.get('min', 0) > 100:
+                elif min_val is not None and min_val > 100:
                     terms.extend(['high viscosity', 'viscous liquid'])
             elif prop == 'boiling_point':
-                if criteria.get('min', 0) > 200:
+                min_val = criteria.get('min')
+                max_val = criteria.get('max')
+                if min_val is not None and min_val > 200:
                     terms.extend(['high boiling point', 'high bp solvent'])
-                elif criteria.get('max', 300) < 100:
+                elif max_val is not None and max_val < 100:
                     terms.extend(['low boiling point', 'volatile solvent'])
             elif prop == 'flash_point':
-                if criteria.get('min', 0) > 100:
+                min_val = criteria.get('min')
+                if min_val is not None and min_val > 100:
                     terms.extend(['high flash point', 'non-flammable'])
         
         return terms
@@ -299,9 +308,7 @@ class PubChemManager:
             # Get basic properties
             properties = ['MolecularWeight', 'MolecularFormula', 'CanonicalSMILES', 
                          'IUPACName', 'XLogP', 'Complexity', 'HydrogenBondDonorCount',
-                         'HydrogenBondAcceptorCount', 'RotatableBondCount', 'TPSA',
-                         'HeavyAtomCount', 'IsotopeAtomCount', 'AtomStereoCount',
-                         'DefinedAtomStereoCount', 'UndefinedAtomStereoCount']
+                         'HydrogenBondAcceptorCount', 'RotatableBondCount', 'TPSA']
             
             comp_props = pcp.get_properties(properties, compound.cid)[0] if compound.cid else {}
             
@@ -361,19 +368,22 @@ class PubChemManager:
         logp = compound.get('logp', 0)
         
         for prop, criteria in target_props.items():
+            if not isinstance(criteria, dict):
+                continue
+                
             if prop == 'viscosity':
                 # Lower MW generally means lower viscosity
-                min_viscosity = criteria.get('min', 0)
-                if min_viscosity > 10 and mw < 100:
+                min_viscosity = criteria.get('min')
+                if min_viscosity is not None and min_viscosity > 10 and mw < 100:
                     return False
             elif prop == 'boiling_point':
-                min_bp = criteria.get('min', 0)
-                if min_bp > 200 and mw < 100:
+                min_bp = criteria.get('min')
+                if min_bp is not None and min_bp > 200 and mw < 100:
                     return False
             elif prop == 'solubility_parameter':
                 # LogP can indicate polarity
                 target_polarity = criteria.get('target')
-                if target_polarity and abs(logp - (5 - target_polarity/3)) > 3:
+                if target_polarity is not None and abs(logp - (5 - target_polarity/3)) > 3:
                     return False
         
         return True
@@ -529,3 +539,25 @@ class PubChemManager:
                 return 'general'
         else:
             return 'general'
+
+    def _get_fallback_compounds(self, material_type: str) -> List[Dict]:
+        """Get fallback compounds for when PubChem is unavailable"""
+        # Simple fallback with basic compounds
+        fallback_compounds = {
+            'solvent': [
+                {'cid': 887, 'name': 'Methanol', 'molecular_weight': 32.04, 'molecular_formula': 'CH4O', 
+                 'smiles': 'CO', 'category': 'balanced', 'iupac_name': 'methanol'},
+                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'molecular_formula': 'H2O',
+                 'smiles': 'O', 'category': 'balanced', 'iupac_name': 'water'},
+                {'cid': 6344, 'name': 'Ethanol', 'molecular_weight': 46.07, 'molecular_formula': 'C2H6O',
+                 'smiles': 'CCO', 'category': 'balanced', 'iupac_name': 'ethanol'}
+            ],
+            'coolant': [
+                {'cid': 6344, 'name': 'Ethanol', 'molecular_weight': 46.07, 'molecular_formula': 'C2H6O',
+                 'smiles': 'CCO', 'category': 'balanced', 'iupac_name': 'ethanol'},
+                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'molecular_formula': 'H2O',
+                 'smiles': 'O', 'category': 'balanced', 'iupac_name': 'water'}
+            ]
+        }
+        
+        return fallback_compounds.get(material_type.lower(), [])
