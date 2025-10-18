@@ -3,11 +3,25 @@ import numpy as np
 import logging
 import hashlib
 import re
+import os
+import time
 from typing import Dict, List, Any, Optional, Tuple
-import diskcache
-from functools import wraps
-import psutil
 import gc
+
+# Try to import diskcache with fallback
+try:
+    import diskcache
+    DISKCACHE_AVAILABLE = True
+except ImportError:
+    DISKCACHE_AVAILABLE = False
+    logging.warning("diskcache not available, using in-memory cache only")
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    logging.warning("psutil not available, memory management disabled")
 
 # Setup logging
 logging.basicConfig(
@@ -24,10 +38,25 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 logging.getLogger('aiohttp').setLevel(logging.WARNING)
 
 class CacheManager:
-    """Enhanced cache manager with disk persistence"""
+    """Enhanced cache manager with disk persistence fallback to memory"""
     def __init__(self, cache_dir="./cache", max_size=1000):
-        self.cache = diskcache.Cache(cache_dir, size_limit=max_size * 1024 * 1024)  # MB
         self.logger = logging.getLogger(__name__)
+        
+        if DISKCACHE_AVAILABLE:
+            try:
+                self.cache = diskcache.Cache(cache_dir, size_limit=max_size * 1024 * 1024)  # MB
+                self.cache_type = "disk"
+                self.logger.info("Using disk-based cache")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize disk cache: {e}, using memory cache")
+                self.cache = {}
+                self.cache_type = "memory"
+        else:
+            self.cache = {}
+            self.cache_type = "memory"
+            self.logger.info("Using in-memory cache (diskcache not available)")
+        
+        self.access_count = {}
     
     def get_key(self, data: Any) -> str:
         """Generate cache key from data"""
@@ -38,7 +67,7 @@ class CacheManager:
         """Get value from cache"""
         try:
             if key in self.cache:
-                self.logger.debug(f"Cache hit for key: {key[:8]}...")
+                self.access_count[key] = self.access_count.get(key, 0) + 1
                 return self.cache[key]
             return None
         except Exception as e:
@@ -48,7 +77,10 @@ class CacheManager:
     def set(self, key: str, value: Any, expire: int = 3600):
         """Set value in cache with expiration"""
         try:
-            self.cache.set(key, value, expire=expire)
+            if self.cache_type == "disk":
+                self.cache.set(key, value, expire=expire)
+            else:
+                self.cache[key] = value
             self.logger.debug(f"Cache set for key: {key[:8]}...")
         except Exception as e:
             self.logger.warning(f"Cache set error: {e}")
@@ -56,7 +88,11 @@ class CacheManager:
     def clear(self):
         """Clear cache"""
         try:
-            self.cache.clear()
+            if self.cache_type == "disk":
+                self.cache.clear()
+            else:
+                self.cache.clear()
+                self.access_count.clear()
             self.logger.info("Cache cleared")
         except Exception as e:
             self.logger.error(f"Cache clear error: {e}")
@@ -87,21 +123,36 @@ class MemoryManager:
     @staticmethod
     def get_memory_usage() -> float:
         """Get current memory usage in MB"""
-        process = psutil.Process()
-        return process.memory_info().rss / 1024 / 1024
+        if not PSUTIL_AVAILABLE:
+            return 0.0
+            
+        try:
+            process = psutil.Process()
+            return process.memory_info().rss / 1024 / 1024
+        except Exception:
+            return 0.0
     
     @staticmethod
     def cleanup_memory():
         """Perform memory cleanup"""
-        initial_memory = MemoryManager.get_memory_usage()
-        gc.collect()
-        final_memory = MemoryManager.get_memory_usage()
-        logging.info(f"Memory cleanup: {initial_memory:.1f}MB -> {final_memory:.1f}MB")
-        return final_memory
+        if not PSUTIL_AVAILABLE:
+            return 0.0
+            
+        try:
+            initial_memory = MemoryManager.get_memory_usage()
+            gc.collect()
+            final_memory = MemoryManager.get_memory_usage()
+            logging.info(f"Memory cleanup: {initial_memory:.1f}MB -> {final_memory:.1f}MB")
+            return final_memory
+        except Exception:
+            return 0.0
     
     @staticmethod
     def check_memory_limit(limit_mb: float = 1000) -> bool:
         """Check if memory usage exceeds limit"""
+        if not PSUTIL_AVAILABLE:
+            return False
+            
         return MemoryManager.get_memory_usage() > limit_mb
 
 class DataValidator:
