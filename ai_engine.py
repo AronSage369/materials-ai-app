@@ -156,53 +156,94 @@ class MaterialsAIEngine:
         
         return default_strategies.get(material_type, default_strategies["Coolant/Lubricant"])
 
-    def generate_formulations(self, compounds_data: Dict, strategy: Dict) -> List[Dict]:
-        formulations = []
-        specialists = compounds_data.get('specialists', {})
-        balanced = compounds_data.get('balanced', [])
+# In the generate_formulations method, add this fallback:
+def generate_formulations(self, compounds_data: Dict, strategy: Dict) -> List[Dict]:
+    formulations = []
+    specialists = compounds_data.get('specialists', {})
+    balanced = compounds_data.get('balanced', [])
+    
+    st.write(f"📊 Generating formulations from {len(balanced)} balanced compounds...")
+    
+    # FALLBACK: If no balanced compounds, create formulations from specialists
+    if not balanced and specialists:
+        st.warning("⚠️ No balanced compounds found. Creating formulations from specialists...")
+        # Get all unique compounds from specialists
+        all_compounds = []
+        for specialist_list in specialists.values():
+            all_compounds.extend(specialist_list)
         
-        st.write(f"📊 Generating formulations from {len(balanced)} balanced compounds and {len(specialists)} specialist categories...")
+        # Remove duplicates
+        unique_compounds = []
+        seen_cids = set()
+        for compound in all_compounds:
+            if hasattr(compound, 'cid') and compound.cid not in seen_cids:
+                unique_compounds.append(compound)
+                seen_cids.add(compound.cid)
         
-        for i, (compound, score) in enumerate(balanced[:3]):
-            formulations.append({
-                'compounds': [compound],
-                'ratios': [1.0],
-                'strategy': f'single_compound_{i+1}',
-                'base_score': score,
-                'composition_type': 'single'
-            })
+        # Create balanced list from unique compounds
+        balanced = []
+        for compound in unique_compounds:
+            score = self._calculate_fallback_score(compound, strategy)
+            balanced.append((compound, score))
         
-        if balanced and specialists:
-            base_compound, base_score = balanced[0]
-            
-            for prop_name, specialist_list in specialists.items():
-                if specialist_list and len(specialist_list) > 0:
-                    specialist = specialist_list[0]
-                    
-                    formulations.append({
-                        'compounds': [base_compound, specialist],
-                        'ratios': [0.7, 0.3],
-                        'strategy': f'base_plus_{prop_name}_specialist',
-                        'base_score': base_score * 0.7 + 0.3,
-                        'composition_type': 'binary'
-                    })
-        
-        if len(balanced) >= 2:
-            for i in range(min(2, len(balanced))):
-                for j in range(i+1, min(3, len(balanced))):
-                    comp1, score1 = balanced[i]
-                    comp2, score2 = balanced[j]
-                    
-                    formulations.append({
-                        'compounds': [comp1, comp2],
-                        'ratios': [0.5, 0.5],
-                        'strategy': f'balanced_combo_{i+1}_{j+1}',
-                        'base_score': (score1 + score2) / 2,
-                        'composition_type': 'binary'
-                    })
-        
-        st.write(f"✅ Generated {len(formulations)} formulations")
-        return formulations
+        # Sort by score
+        balanced.sort(key=lambda x: x[1], reverse=True)
+    
+    # Now proceed with normal formulation generation
+    for i, (compound, score) in enumerate(balanced[:5]):  # Use top 5
+        formulations.append({
+            'compounds': [compound],
+            'ratios': [1.0],
+            'strategy': f'single_compound_{i+1}',
+            'base_score': score,
+            'composition_type': 'single'
+        })
+    
+    # Create binary mixtures from top compounds
+    if len(balanced) >= 2:
+        for i in range(min(3, len(balanced))):
+            for j in range(i+1, min(4, len(balanced))):
+                comp1, score1 = balanced[i]
+                comp2, score2 = balanced[j]
+                
+                formulations.append({
+                    'compounds': [comp1, comp2],
+                    'ratios': [0.6, 0.4],
+                    'strategy': f'binary_mixture_{i+1}_{j+1}',
+                    'base_score': (score1 * 0.6 + score2 * 0.4),
+                    'composition_type': 'binary'
+                })
+    
+    st.write(f"✅ Generated {len(formulations)} formulations")
+    return formulations
+
+    def _calculate_fallback_score(self, compound, strategy: Dict) -> float:
+    """Calculate score when no proper scoring is available"""
+    base_score = 0.5
+    
+    # Basic scoring based on compound type
+    name_lower = str(compound.iupac_name).lower() if compound.iupac_name else ""
+    
+    # Boost scores for known coolant types
+    if any(term in name_lower for term in ['siloxane', 'silicone']):
+        base_score += 0.3
+    elif any(term in name_lower for term in ['ester', 'glycol']):
+        base_score += 0.2
+    elif any(term in name_lower for term in ['oil', 'alkane']):
+        base_score += 0.1
+    
+    # Penalize for constraints
+    constraints = strategy.get('safety_constraints', [])
+    formula = getattr(compound, 'molecular_formula', '')
+    
+    if 'non_toxic' in constraints:
+        if any(element in formula for element in ['Pb', 'Hg', 'Cd', 'As']):
+            base_score -= 0.5
+    
+    if 'pfas_free' in constraints and 'F' in formula:
+        base_score -= 0.3
+    
+    return max(0.1, min(1.0, base_score))
 
     def evaluate_and_rank_formulations(self, formulations: List[Dict], strategy: Dict, min_confidence: float) -> Dict[str, Any]:
         if not formulations:
