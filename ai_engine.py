@@ -2,273 +2,244 @@ import random
 from typing import Dict, List, Any, Optional
 import numpy as np
 import logging
-from utils import cached, MemoryManager
-
-# Try to import dependencies with fallbacks
-try:
-    from ai_strategist import AIStrategist
-except ImportError:
-    logging.warning("AIStrategist not available, using fallback")
-    from utils import AIStrategistFallback as AIStrategist
-
-try:
-    from computational_predictor import ComputationalPredictor
-except ImportError:
-    logging.warning("ComputationalPredictor not available, using fallback")
-    from utils import ComputationalPredictorFallback as ComputationalPredictor
 
 class CreativeAIEngine:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.logger = logging.getLogger(__name__)
+        self.creative_agents = self._initialize_innovative_agents()
         
-        try:
-            self.strategist = AIStrategist(api_key)
-            self.computational_predictor = ComputationalPredictor()
-        except Exception as e:
-            self.logger.error(f"Failed to initialize AI components: {e}")
-            raise
-        
-        self.creative_agents = self._initialize_creative_agents()
-        
-    def _initialize_creative_agents(self) -> Dict[str, Any]:
-        """Initialize creative AI agents with different thinking styles"""
+    def _initialize_innovative_agents(self) -> Dict[str, Any]:
+        """Initialize highly innovative AI agents"""
         return {
-            'quantum_thinker': {
-                'name': 'Quantum Thinking Agent',
-                'focus': 'Electronic structure and quantum effects',
-                'approach': 'Focuses on molecular orbitals, band structure, quantum confinement'
+            'quantum_architect': {
+                'name': 'Quantum Materials Architect',
+                'focus': 'Quantum effects, electronic structure, nanoscale phenomena',
+                'approach': 'Designs materials with quantum confinement, band engineering, and emergent electronic properties',
+                'innovation_level': 0.9
             },
-            'biomimetic_thinker': {
-                'name': 'Biomimetic Agent', 
-                'focus': 'Nature-inspired solutions',
-                'approach': 'Looks at biological systems and natural materials'
+            'bio_inspired_designer': {
+                'name': 'Bio-Inspired Materials Designer', 
+                'focus': 'Nature-inspired solutions, self-assembly, biological principles',
+                'approach': 'Leverages evolutionary optimized biological systems and biomimetic principles',
+                'innovation_level': 0.8
             },
-            'combinatorial_thinker': {
-                'name': 'Combinatorial Explorer',
-                'focus': 'Novel combinations and emergent properties',
-                'approach': 'Explores unconventional combinations for new functionalities'
+            'multiscale_engineer': {
+                'name': 'Multiscale Systems Engineer',
+                'focus': 'Hierarchical structures, interface engineering, composite systems',
+                'approach': 'Engineers materials across multiple length scales for optimal performance',
+                'innovation_level': 0.85
             },
-            'nanoscale_thinker': {
-                'name': 'Nanoscale Architect',
-                'focus': 'Nanostructures and interfaces',
-                'approach': 'Focuses on nanoscale effects and interfacial engineering'
+            'emergent_properties_explorer': {
+                'name': 'Emergent Properties Explorer',
+                'focus': 'Synergistic combinations, unexpected functionalities, novel phenomena',
+                'approach': 'Seeks formulations where components interact to create new capabilities',
+                'innovation_level': 0.95
             },
-            'energy_thinker': {
-                'name': 'Energy Materials Specialist',
-                'focus': 'Energy conversion and storage',
-                'approach': 'Specializes in photovoltaic, catalytic, and energy storage materials'
+            'computational_alchemist': {
+                'name': 'Computational Alchemist',
+                'focus': 'High-risk high-reward combinations, unconventional mixtures',
+                'approach': 'Explores chemical space boundaries and unconventional formulations',
+                'innovation_level': 1.0
             }
         }
 
-    @cached
     def creative_formulation_generation(self, compounds: List[Dict], strategy: Dict, 
                                      innovation_factor: float) -> List[Dict]:
-        """Generate formulations using creative AI thinking"""
-        try:
-            if not compounds:
-                self.logger.warning("No compounds provided, using fallback formulations")
-                return self._get_fallback_formulations(strategy)
-            
-            all_formulations = []
-            
-            # Let each creative agent generate formulations
-            for agent_name, agent_info in self.creative_agents.items():
-                try:
-                    formulations = getattr(self, f'_{agent_name}_formulation')(
-                        compounds, strategy, innovation_factor
-                    )
-                    all_formulations.extend(formulations)
-                    
-                    # Memory management
-                    if MemoryManager.check_memory_limit():
-                        MemoryManager.cleanup_memory()
-                        
-                except Exception as e:
-                    self.logger.error(f"Agent {agent_name} failed: {e}")
-                    continue
-            
-            if not all_formulations:
-                self.logger.warning("All agents failed, using fallback")
-                return self._get_fallback_formulations(strategy)
-            
-            # Add computational enhancement predictions
-            enhanced_formulations = []
-            for formulation in all_formulations:
-                try:
-                    enhanced = self._enhance_with_computational_insights(formulation, strategy)
-                    enhanced_formulations.append(enhanced)
-                except Exception as e:
-                    self.logger.error(f"Enhancement failed for formulation: {e}")
-                    enhanced_formulations.append(formulation)  # Keep original
-            
-            return self._select_most_promising(enhanced_formulations, strategy)
-            
-        except Exception as e:
-            self.logger.error(f"Creative formulation generation failed: {e}")
-            return self._get_fallback_formulations(strategy)
+        """Generate highly innovative formulations using advanced AI thinking"""
+        all_formulations = []
+        
+        # Each agent generates formulations with their unique perspective
+        for agent_name, agent_info in self.creative_agents.items():
+            try:
+                formulations = getattr(self, f'_{agent_name}_formulation')(
+                    compounds, strategy, innovation_factor
+                )
+                all_formulations.extend(formulations)
+                self.logger.info(f"Agent {agent_name} generated {len(formulations)} formulations")
+            except Exception as e:
+                self.logger.error(f"Agent {agent_name} failed: {e}")
+                continue
+        
+        # Ensure minimum formulations
+        if len(all_formulations) < 10:
+            additional = self._emergency_creative_generation(compounds, strategy, 10 - len(all_formulations))
+            all_formulations.extend(additional)
+        
+        # Score and select most promising
+        scored_formulations = []
+        for formulation in all_formulations:
+            score = self._calculate_innovation_score(formulation, strategy, innovation_factor)
+            formulation['innovation_score'] = score
+            scored_formulations.append(formulation)
+        
+        # Sort by innovation score
+        scored_formulations.sort(key=lambda x: x['innovation_score'], reverse=True)
+        return scored_formulations[:25]  # Return top 25 most innovative
 
-    def _quantum_thinker_formulation(self, compounds: List[Dict], strategy: Dict, 
-                                   innovation_factor: float) -> List[Dict]:
-        """Quantum-thinking agent formulations"""
+    def _quantum_architect_formulation(self, compounds: List[Dict], strategy: Dict, 
+                                    innovation_factor: float) -> List[Dict]:
+        """Quantum architect formulations focusing on electronic properties"""
         formulations = []
         
-        # Focus on electronic properties
-        electronic_compounds = [c for c in compounds if self._has_electronic_character(c)]
+        # Find compounds with quantum-relevant properties
+        quantum_compounds = [c for c in compounds if self._is_quantum_relevant(c)]
         
-        # If no electronic compounds, use all compounds
-        if not electronic_compounds:
-            electronic_compounds = compounds
-        
-        num_formulations = 3 + int(innovation_factor * 7)
+        num_formulations = 5 + int(innovation_factor * 10)
         
         for _ in range(num_formulations):
             try:
-                # Create formulations with electronic functionality
-                num_components = random.randint(1, min(4, len(electronic_compounds)))
-                selected = random.sample(electronic_compounds, num_components)
+                # Create quantum-optimized formulations
+                num_components = random.randint(2, 5)
+                if quantum_compounds:
+                    selected = random.sample(quantum_compounds, min(num_components, len(quantum_compounds)))
+                else:
+                    selected = random.sample(compounds, min(num_components, len(compounds)))
                 
-                formulation = self._create_creative_formulation(selected, strategy, 'quantum_thinker')
-                formulation['thinking'] = "Designed for optimal electronic structure and charge transport"
+                formulation = self._create_innovative_formulation(selected, strategy, 'quantum_architect')
+                formulation['thinking'] = "Quantum-optimized for electronic structure and nanoscale effects"
                 formulations.append(formulation)
             except Exception as e:
-                self.logger.warning(f"Quantum thinker formulation failed: {e}")
                 continue
         
         return formulations
 
-    def _biomimetic_thinker_formulation(self, compounds: List[Dict], strategy: Dict, 
-                                      innovation_factor: float) -> List[Dict]:
-        """Biomimetic agent formulations"""
-        formulations = []
-        
-        # Look for bio-inspired compounds
-        bio_compounds = [c for c in compounds if self._has_biological_relevance(c)]
-        
-        # If no bio compounds, use all compounds
-        if not bio_compounds:
-            bio_compounds = compounds
-        
-        num_formulations = 2 + int(innovation_factor * 5)
-        
-        for _ in range(num_formulations):
-            try:
-                # Create nature-inspired formulations
-                num_components = min(3, len(bio_compounds))
-                selected = random.sample(bio_compounds, num_components)
-                
-                formulation = self._create_creative_formulation(selected, strategy, 'biomimetic_thinker')
-                formulation['thinking'] = "Inspired by natural systems and biological materials"
-                formulations.append(formulation)
-            except Exception as e:
-                self.logger.warning(f"Biomimetic thinker formulation failed: {e}")
-                continue
-        
-        return formulations
-
-    def _combinatorial_thinker_formulation(self, compounds: List[Dict], strategy: Dict, 
+    def _bio_inspired_designer_formulation(self, compounds: List[Dict], strategy: Dict, 
                                          innovation_factor: float) -> List[Dict]:
-        """Combinatorial explorer agent formulations"""
+        """Bio-inspired formulations"""
         formulations = []
+        
+        # Find bio-relevant compounds
+        bio_compounds = [c for c in compounds if self._is_bio_relevant(c)]
         
         num_formulations = 4 + int(innovation_factor * 8)
         
         for _ in range(num_formulations):
             try:
-                # Mix different classes of compounds
-                organic = [c for c in compounds if self._is_organic(c)]
-                inorganic = [c for c in compounds if self._is_inorganic(c)]
-                polymeric = [c for c in compounds if self._is_polymeric(c)]
+                # Create nature-inspired formulations
+                num_components = random.randint(2, 4)
+                if bio_compounds:
+                    selected = random.sample(bio_compounds, min(num_components, len(bio_compounds)))
+                else:
+                    selected = random.sample(compounds, min(num_components, len(compounds)))
                 
+                formulation = self._create_innovative_formulation(selected, strategy, 'bio_inspired_designer')
+                formulation['thinking'] = "Bio-inspired design leveraging natural principles and self-assembly"
+                formulations.append(formulation)
+            except Exception as e:
+                continue
+        
+        return formulations
+
+    def _multiscale_engineer_formulation(self, compounds: List[Dict], strategy: Dict, 
+                                       innovation_factor: float) -> List[Dict]:
+        """Multiscale engineered formulations"""
+        formulations = []
+        
+        # Categorize compounds by scale
+        molecular_scale = [c for c in compounds if self._is_molecular_scale(c)]
+        nano_scale = [c for c in compounds if self._is_nano_scale(c)]
+        macro_scale = [c for c in compounds if self._is_macro_scale(c)]
+        
+        num_formulations = 6 + int(innovation_factor * 12)
+        
+        for _ in range(num_formulations):
+            try:
+                # Mix across scales
                 selected = []
-                if organic: 
-                    selected.append(random.choice(organic))
-                if inorganic: 
-                    selected.append(random.choice(inorganic))
-                if polymeric and len(selected) < 3: 
-                    selected.append(random.choice(polymeric))
+                if molecular_scale: selected.append(random.choice(molecular_scale))
+                if nano_scale: selected.append(random.choice(nano_scale))
+                if macro_scale and len(selected) < 3: selected.append(random.choice(macro_scale))
                 
-                # If we don't have enough components, add random ones
-                while len(selected) < min(3, len(compounds)):
+                # Fill remaining slots
+                while len(selected) < min(4, len(compounds)):
                     available = [c for c in compounds if c not in selected]
                     if available:
                         selected.append(random.choice(available))
                     else:
                         break
                 
-                if not selected:
-                    selected = random.sample(compounds, min(3, len(compounds)))
-                
-                formulation = self._create_creative_formulation(selected, strategy, 'combinatorial_thinker')
-                formulation['thinking'] = "Exploring emergent properties from unconventional combinations"
+                formulation = self._create_innovative_formulation(selected, strategy, 'multiscale_engineer')
+                formulation['thinking'] = "Multiscale engineered for hierarchical structure and optimized interfaces"
                 formulations.append(formulation)
             except Exception as e:
-                self.logger.warning(f"Combinatorial thinker formulation failed: {e}")
                 continue
         
         return formulations
 
-    def _nanoscale_thinker_formulation(self, compounds: List[Dict], strategy: Dict, 
-                                     innovation_factor: float) -> List[Dict]:
-        """Nanoscale architect agent formulations"""
+    def _emergent_properties_explorer_formulation(self, compounds: List[Dict], strategy: Dict, 
+                                                innovation_factor: float) -> List[Dict]:
+        """Formulations targeting emergent properties"""
         formulations = []
         
-        # Focus on compounds with nanoscale potential
-        nano_compounds = [c for c in compounds if self._has_nanoscale_potential(c)]
-        
-        # If no nano compounds, use all compounds
-        if not nano_compounds:
-            nano_compounds = compounds
-        
-        num_formulations = 3 + int(innovation_factor * 6)
+        num_formulations = 8 + int(innovation_factor * 15)
         
         for _ in range(num_formulations):
             try:
-                num_components = min(4, len(nano_compounds))
-                selected = random.sample(nano_compounds, num_components)
+                # Create unconventional combinations for emergent properties
+                num_components = random.randint(3, 6)
                 
-                formulation = self._create_creative_formulation(selected, strategy, 'nanoscale_thinker')
-                formulation['thinking'] = "Designed for nanoscale effects and interfacial engineering"
+                # Ensure chemical diversity
+                selected = []
+                categories_used = set()
+                
+                while len(selected) < num_components and len(selected) < len(compounds):
+                    available = [c for c in compounds if c not in selected]
+                    if not available:
+                        break
+                    
+                    # Prefer compounds from unused categories
+                    candidate = random.choice(available)
+                    cat = self._categorize_compound(candidate)
+                    if cat not in categories_used:
+                        selected.append(candidate)
+                        categories_used.add(cat)
+                    else:
+                        # Sometimes add from used category for complexity
+                        if random.random() < 0.3:
+                            selected.append(candidate)
+                
+                formulation = self._create_innovative_formulation(selected, strategy, 'emergent_properties_explorer')
+                formulation['thinking'] = "Designed for emergent properties and synergistic interactions"
                 formulations.append(formulation)
             except Exception as e:
-                self.logger.warning(f"Nanoscale thinker formulation failed: {e}")
                 continue
         
         return formulations
 
-    def _energy_thinker_formulation(self, compounds: List[Dict], strategy: Dict, 
-                                  innovation_factor: float) -> List[Dict]:
-        """Energy materials specialist agent formulations"""
+    def _computational_alchemist_formulation(self, compounds: List[Dict], strategy: Dict, 
+                                           innovation_factor: float) -> List[Dict]:
+        """High-risk high-reward formulations"""
         formulations = []
-        
-        # Focus on energy-related compounds
-        energy_compounds = [c for c in compounds if self._has_energy_relevance(c)]
-        
-        # If no energy compounds, use all compounds
-        if not energy_compounds:
-            energy_compounds = compounds
         
         num_formulations = 3 + int(innovation_factor * 7)
         
         for _ in range(num_formulations):
             try:
-                num_components = min(4, len(energy_compounds))
-                selected = random.sample(energy_compounds, num_components)
+                # Create truly unconventional formulations
+                num_components = random.randint(2, 8)
                 
-                formulation = self._create_creative_formulation(selected, strategy, 'energy_thinker')
-                formulation['thinking'] = "Optimized for energy conversion and storage applications"
+                # Use weighted random selection based on molecular complexity
+                weights = [c.get('complexity', 1) for c in compounds]
+                if sum(weights) > 0:
+                    selected = random.choices(compounds, weights=weights, k=min(num_components, len(compounds)))
+                else:
+                    selected = random.sample(compounds, min(num_components, len(compounds)))
+                
+                formulation = self._create_innovative_formulation(selected, strategy, 'computational_alchemist')
+                formulation['thinking'] = "High-risk exploration of unconventional chemical space"
+                formulation['risk_level'] = random.uniform(0.7, 1.0)
                 formulations.append(formulation)
             except Exception as e:
-                self.logger.warning(f"Energy thinker formulation failed: {e}")
                 continue
         
         return formulations
 
-    def _create_creative_formulation(self, compounds: List[Dict], strategy: Dict, 
-                                   agent_type: str) -> Dict[str, Any]:
-        """Create a creatively designed formulation"""
-        # Generate innovative mass percentages
-        mass_percentages = self._generate_innovative_percentages(len(compounds))
+    def _create_innovative_formulation(self, compounds: List[Dict], strategy: Dict, 
+                                     agent_type: str) -> Dict[str, Any]:
+        """Create an innovative formulation"""
+        # Use innovative mass distribution strategies
+        mass_percentages = self._innovative_mass_distribution(len(compounds))
         
         composition = []
         for i, compound in enumerate(compounds):
@@ -278,226 +249,169 @@ class CreativeAIEngine:
                 'mass_percentage': mass_percentages[i],
                 'molecular_weight': compound.get('molecular_weight'),
                 'smiles': compound.get('smiles'),
-                'category': compound.get('category', 'creative')
+                'category': compound.get('category', 'innovative'),
+                'complexity': compound.get('complexity', 1)
             }
             composition.append(comp_data)
         
-        # Calculate mole ratios
-        composition = self._calculate_mole_ratios(composition)
+        # Calculate advanced properties
+        composition = self._calculate_advanced_ratios(composition)
         
         return {
             'composition': composition,
             'agent_type': self.creative_agents[agent_type]['name'],
-            'strategy_alignment': random.uniform(0.7, 0.95),
-            'confidence': random.uniform(0.6, 0.9),
-            'innovation_score': random.uniform(0.5, 0.95),
-            'computational_insights': {},
-            'scientific_evaluation': {}
+            'agent_innovation_level': self.creative_agents[agent_type]['innovation_level'],
+            'strategy_alignment': random.uniform(0.6, 0.95),
+            'chemical_diversity': self._calculate_diversity(composition),
+            'complexity_score': self._calculate_complexity(composition),
+            'synergy_potential': random.uniform(0.5, 0.9)
         }
 
-    def _enhance_with_computational_insights(self, formulation: Dict, strategy: Dict) -> Dict:
-        """Add computational chemistry insights to formulation"""
-        try:
-            # Get computational predictions
-            target_props = strategy.get('target_properties', {})
-            computational_insights = self.computational_predictor.predict_advanced_properties(
-                formulation, target_props
-            )
-            
-            # Get AI scientific evaluation
-            scientific_eval = self.strategist.evaluate_formulation_science(formulation, strategy)
-            
-            formulation['computational_insights'] = computational_insights
-            formulation['scientific_evaluation'] = scientific_eval
-            
-            return formulation
-        except Exception as e:
-            self.logger.error(f"Error in computational enhancement: {e}")
-            return formulation
-
-    def _select_most_promising(self, formulations: List[Dict], strategy: Dict) -> List[Dict]:
-        """Select most promising formulations based on multiple criteria"""
-        scored_formulations = []
-        
-        for formulation in formulations:
-            score = self._calculate_promising_score(formulation, strategy)
-            formulation['promising_score'] = score
-            scored_formulations.append(formulation)
-        
-        # Sort by promising score
-        scored_formulations.sort(key=lambda x: x['promising_score'], reverse=True)
-        return scored_formulations[:20]  # Return top 20
-
-    def _calculate_promising_score(self, formulation: Dict, strategy: Dict) -> float:
-        """Calculate how promising a formulation is"""
-        base_score = formulation.get('innovation_score', 0.5)
-        strategy_alignment = formulation.get('strategy_alignment', 0.5)
-        confidence = formulation.get('confidence', 0.5)
-        
-        # Consider computational insights
-        comp_insights = formulation.get('computational_insights', {})
-        if comp_insights:
-            try:
-                avg_confidence = np.mean([insight.get('confidence', 0) for insight in comp_insights.values()])
-                base_score += avg_confidence * 0.2
-            except:
-                pass
-        
-        # Consider scientific evaluation
-        sci_eval = formulation.get('scientific_evaluation', {})
-        feasibility = sci_eval.get('scientific_feasibility', 'Medium')
-        feasibility_score = {'High': 0.3, 'Medium': 0.15, 'Low': 0.0}.get(feasibility, 0.1)
-        
-        return (base_score * 0.4 + strategy_alignment * 0.3 + 
-                confidence * 0.2 + feasibility_score)
-
-    # Helper methods for compound classification
-    def _has_electronic_character(self, compound: Dict) -> bool:
-        """Check if compound has electronic functionality"""
-        name = compound.get('name', '').lower()
-        smiles = compound.get('smiles', '').lower()
-        electronic_indicators = ['conjugated', 'aromatic', 'polymeric', 'fullerene', 
-                               'graphene', 'nanotube', 'quantum', 'semiconductor']
-        return any(indicator in name or indicator in smiles 
-                  for indicator in electronic_indicators)
-
-    def _has_biological_relevance(self, compound: Dict) -> bool:
-        """Check if compound is biologically relevant"""
-        name = compound.get('name', '').lower()
-        bio_indicators = ['enzyme', 'protein', 'lipid', 'sugar', 'carbohydrate', 
-                         'amino', 'peptide', 'biological', 'natural']
-        return any(indicator in name for indicator in bio_indicators)
-
-    def _is_organic(self, compound: Dict) -> bool:
-        """Check if compound is organic"""
-        formula = compound.get('molecular_formula', '')
-        return 'C' in formula and formula.count('C') > 0
-
-    def _is_inorganic(self, compound: Dict) -> bool:
-        """Check if compound is inorganic"""
-        name = compound.get('name', '').lower()
-        inorganic_indicators = ['oxide', 'salt', 'mineral', 'metal', 'silicate', 
-                              'zeolite', 'ceramic']
-        return any(indicator in name for indicator in inorganic_indicators)
-
-    def _is_polymeric(self, compound: Dict) -> bool:
-        """Check if compound is polymeric"""
-        name = compound.get('name', '').lower()
-        mw = compound.get('molecular_weight', 0)
-        return 'poly' in name or mw > 1000
-
-    def _has_nanoscale_potential(self, compound: Dict) -> bool:
-        """Check if compound has nanoscale potential"""
-        name = compound.get('name', '').lower()
-        nano_indicators = ['nano', 'quantum', 'cluster', 'particle', 'dot', 
-                          'tube', 'sheet', 'wire']
-        return any(indicator in name for indicator in nano_indicators)
-
-    def _has_energy_relevance(self, compound: Dict) -> bool:
-        """Check if compound is energy-relevant"""
-        name = compound.get('name', '').lower()
-        energy_indicators = ['photo', 'solar', 'battery', 'fuel', 'catalyst', 
-                           'electrode', 'conductor', 'storage']
-        return any(indicator in name for indicator in energy_indicators)
-
-    def _generate_innovative_percentages(self, num_components: int) -> List[float]:
-        """Generate innovative mass percentages"""
+    def _innovative_mass_distribution(self, num_components: int) -> List[float]:
+        """Generate innovative mass distributions"""
         if num_components == 1:
             return [100.0]
         
-        # More creative distribution than simple random
-        if num_components == 2:
-            # Often one major component
-            major = random.uniform(60, 90)
-            return [major, 100 - major]
-        elif num_components == 3:
-            # Various distributions
-            distribution_type = random.choice(['balanced', 'major_minor', 'gradient'])
-            if distribution_type == 'balanced':
-                base = 100 / num_components
-                return [base * random.uniform(0.7, 1.3) for _ in range(num_components)]
-            elif distribution_type == 'major_minor':
-                major = random.uniform(50, 80)
-                remaining = 100 - major
-                minor1 = remaining * random.uniform(0.3, 0.7)
-                return [major, minor1, remaining - minor1]
-            else:  # gradient
-                return sorted([random.uniform(5, 60) for _ in range(num_components)], reverse=True)
-        else:
-            # Complex distributions
-            percentages = [random.uniform(1, 40) for _ in range(num_components)]
-            total = sum(percentages)
-            return [p/total * 100 for p in percentages]
+        distributions = [
+            # Major-minor distribution
+            lambda n: [70] + [30/(n-1)] * (n-1) if n > 1 else [100],
+            # Balanced distribution
+            lambda n: [100/n] * n,
+            # Gradient distribution
+            lambda n: sorted([random.uniform(5, 60) for _ in range(n)], reverse=True),
+            # Bimodal distribution
+            lambda n: [40, 40] + [20/(n-2)] * (n-2) if n > 2 else [60, 40],
+            # Random complex distribution
+            lambda n: [random.uniform(1, 80) for _ in range(n)]
+        ]
+        
+        # Choose random distribution and normalize
+        distribution = random.choice(distributions)(num_components)
+        total = sum(distribution)
+        return [d/total * 100 for d in distribution]
 
-    def _calculate_mole_ratios(self, composition: List[Dict]) -> List[Dict]:
-        """Calculate mole ratios and percentages"""
-        total_moles = 0
-        mole_data = []
+    def _calculate_innovation_score(self, formulation: Dict, strategy: Dict, innovation_factor: float) -> float:
+        """Calculate innovation score considering multiple factors"""
+        base_innovation = formulation.get('agent_innovation_level', 0.5)
+        diversity = formulation.get('chemical_diversity', 0.5)
+        complexity = formulation.get('complexity_score', 0.5)
+        synergy = formulation.get('synergy_potential', 0.5)
+        alignment = formulation.get('strategy_alignment', 0.5)
+        
+        # Weight factors based on innovation factor
+        weights = {
+            'base_innovation': 0.3,
+            'diversity': 0.2,
+            'complexity': 0.15,
+            'synergy': 0.2,
+            'alignment': 0.15
+        }
+        
+        # Adjust weights for higher innovation factor
+        if innovation_factor > 0.7:
+            weights.update({'base_innovation': 0.4, 'complexity': 0.25, 'alignment': 0.1})
+        
+        score = (base_innovation * weights['base_innovation'] +
+                diversity * weights['diversity'] +
+                complexity * weights['complexity'] +
+                synergy * weights['synergy'] +
+                alignment * weights['alignment'])
+        
+        return min(1.0, score * (1 + innovation_factor * 0.5))
+
+    # Enhanced compound classification methods
+    def _is_quantum_relevant(self, compound: Dict) -> bool:
+        name = compound.get('name', '').lower()
+        smiles = compound.get('smiles', '').lower()
+        quantum_indicators = ['quantum', 'nanotube', 'graphene', '2D', 'semiconductor', 
+                            'conjugated', 'aromatic', 'fullerene', 'perovskite']
+        return any(indicator in name or indicator in smiles for indicator in quantum_indicators)
+
+    def _is_bio_relevant(self, compound: Dict) -> bool:
+        name = compound.get('name', '').lower()
+        bio_indicators = ['enzyme', 'protein', 'lipid', 'sugar', 'amino', 'peptide',
+                         'biological', 'natural', 'plant', 'animal', 'cell']
+        return any(indicator in name for indicator in bio_indicators)
+
+    def _is_molecular_scale(self, compound: Dict) -> bool:
+        mw = compound.get('molecular_weight', 0)
+        return mw < 500
+
+    def _is_nano_scale(self, compound: Dict) -> bool:
+        name = compound.get('name', '').lower()
+        mw = compound.get('molecular_weight', 0)
+        return 'nano' in name or mw > 1000
+
+    def _is_macro_scale(self, compound: Dict) -> bool:
+        mw = compound.get('molecular_weight', 0)
+        return mw > 5000
+
+    def _categorize_compound(self, compound: Dict) -> str:
+        """Categorize compound for diversity calculation"""
+        name = compound.get('name', '').lower()
+        if any(word in name for word in ['polymer', 'poly']):
+            return 'polymer'
+        elif any(word in name for word in ['nanotube', 'graphene', 'quantum']):
+            return 'nanomaterial'
+        elif any(word in name for word in ['acid', 'base', 'salt']):
+            return 'inorganic'
+        elif any(word in name for word in ['organic', 'carbon']):
+            return 'organic'
+        elif any(word in name for word in ['metal', 'oxide']):
+            return 'metal'
+        else:
+            return 'other'
+
+    def _calculate_diversity(self, composition: List[Dict]) -> float:
+        """Calculate chemical diversity of formulation"""
+        categories = [self._categorize_compound(comp) for comp in composition]
+        unique_categories = len(set(categories))
+        max_possible = min(len(composition), 5)  # Maximum of 5 categories
+        return unique_categories / max_possible
+
+    def _calculate_complexity(self, composition: List[Dict]) -> float:
+        """Calculate molecular complexity of formulation"""
+        complexities = [comp.get('complexity', 1) for comp in composition]
+        if complexities:
+            avg_complexity = sum(complexities) / len(complexities)
+            return min(1.0, avg_complexity / 500)  # Normalize
+        return 0.5
+
+    def _calculate_advanced_ratios(self, composition: List[Dict]) -> List[Dict]:
+        """Calculate advanced molecular ratios"""
+        total_mass = sum(comp['mass_percentage'] for comp in composition)
         
         for comp in composition:
-            mass_percent = comp['mass_percentage']
-            mw = comp.get('molecular_weight')
+            mass_frac = comp['mass_percentage'] / total_mass
+            mw = comp.get('molecular_weight', 100)
             
-            if mw and mw > 0:
-                moles = mass_percent / mw
-            else:
-                moles = mass_percent / 100  # Fallback
-                
-            mole_data.append(moles)
-            total_moles += moles
-        
+            # Calculate mole-based properties
+            comp['mole_fraction'] = mass_frac / mw if mw > 0 else mass_frac
+            comp['volume_estimate'] = mass_frac * mw / 1000  # Rough estimate
+            
+        # Normalize mole fractions
+        total_moles = sum(comp['mole_fraction'] for comp in composition)
         if total_moles > 0:
-            for i, comp in enumerate(composition):
-                comp['mole_percentage'] = (mole_data[i] / total_moles) * 100
-                comp['mole_ratio'] = mole_data[i] / min(mole_data) if min(mole_data) > 0 else 1
-        else:
             for comp in composition:
-                comp['mole_percentage'] = 100.0 / len(composition)
-                comp['mole_ratio'] = 1.0
+                comp['mole_fraction'] /= total_moles
         
         return composition
 
-    def _get_fallback_formulations(self, strategy: Dict) -> List[Dict]:
-        """Provide basic formulations when generation fails"""
-        self.logger.info("Using fallback formulations")
-        return [{
-            'composition': [{
-                'name': 'Basic Formulation', 
-                'mass_percentage': 100.0,
-                'category': 'fallback'
-            }],
-            'agent_type': 'Fallback Agent',
-            'strategy_alignment': 0.5,
-            'confidence': 0.3,
-            'innovation_score': 0.3,
-            'computational_insights': {},
-            'scientific_evaluation': {'scientific_feasibility': 'Medium'},
-            'thinking': 'Basic fallback formulation'
-        }]
-
-# Fallback classes for when dependencies are missing
-class AIStrategistFallback:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-    
-    def think_about_challenge(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
-        return {
-            "scientific_analysis": f"Basic analysis for {material_type}",
-            "key_mechanisms": ["basic functionality"],
-            "target_compound_classes": [material_type],
-            "search_strategy": {
-                "primary_terms": [material_type],
-                "innovative_terms": []
-            }
-        }
-    
-    def evaluate_formulation_science(self, formulation: Dict, strategy: Dict) -> Dict[str, Any]:
-        return {
-            "scientific_feasibility": "Medium",
-            "key_advantages": ["Basic functionality"],
-            "potential_issues": []
-        }
-
-class ComputationalPredictorFallback:
-    def predict_advanced_properties(self, formulation: Dict, target_props: Dict) -> Dict[str, Any]:
-        return {}
+    def _emergency_creative_generation(self, compounds: List[Dict], strategy: Dict, 
+                                     num_needed: int) -> List[Dict]:
+        """Emergency formulation generation when other methods fail"""
+        formulations = []
+        
+        for _ in range(num_needed):
+            try:
+                num_components = random.randint(1, min(4, len(compounds)))
+                selected = random.sample(compounds, num_components)
+                
+                formulation = self._create_innovative_formulation(selected, strategy, 'computational_alchemist')
+                formulation['thinking'] = "Emergency creative formulation"
+                formulation['emergency_generated'] = True
+                formulations.append(formulation)
+            except:
+                continue
+        
+        return formulations
