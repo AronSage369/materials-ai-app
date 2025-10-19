@@ -3,7 +3,6 @@ from typing import Dict, List, Any, Optional, Tuple
 import re
 import random
 import logging
-from utils import cached, MemoryManager, PropertyCalculator
 
 class AdvancedPropertyPredictor:
     def __init__(self):
@@ -24,7 +23,6 @@ class AdvancedPropertyPredictor:
             'toxicity': self.predict_toxicity
         }
         
-    @cached
     def predict_all_properties(self, formulations: List[Dict], 
                              target_properties: Dict) -> List[Dict]:
         """Predict all required properties for formulations"""
