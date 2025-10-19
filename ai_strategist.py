@@ -4,9 +4,14 @@ import re
 import logging
 from typing import Dict, List, Any, Optional
 import numpy as np
-from utils import cached, MemoryManager
+from utils import cached
 
-class AIStrategist:
+class EnhancedAIStrategist:
+    """
+    Advanced AI strategist that uses multi-step reasoning and creative thinking
+    to develop innovative materials solutions
+    """
+    
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.model = None
@@ -14,81 +19,81 @@ class AIStrategist:
         self.set_api_key(api_key)
         
     def set_api_key(self, api_key: str):
-        """Configure Gemini API with error handling"""
+        """Configure Gemini API"""
         try:
-            if not api_key:
-                raise ValueError("API key cannot be empty")
-                
             genai.configure(api_key=api_key)
-            # Try to use the model, fallback to simpler model if needed
-            try:
-                self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
-                # Test the model with a simple prompt
-                test_response = self.model.generate_content("Test")
-                self.logger.info("Gemini API configured successfully")
-            except Exception as model_error:
-                self.logger.warning(f"Flash model failed, trying pro: {model_error}")
-                self.model = genai.GenerativeModel('gemini-pro')
-                
+            self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
         except Exception as e:
             self.logger.error(f"Failed to configure Gemini API: {str(e)}")
-            raise Exception(f"Failed to configure Gemini API: {str(e)}")
+            raise
 
     @cached
-    def think_about_challenge(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
-        """Advanced AI thinking about the challenge - generates search strategies, compound classes, and formulation approaches"""
+    def deep_scientific_analysis(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
+        """
+        Perform deep scientific analysis using multi-step reasoning
+        """
         prompt = f"""
-        You are an expert computational materials scientist and AI research assistant. 
-        Analyze this materials challenge and think deeply about the solution.
+        You are an EXPERT computational materials scientist, chemist, and AI research pioneer.
+        Your task is to perform DEEP SCIENTIFIC ANALYSIS of this materials challenge.
 
         CHALLENGE: {challenge_text}
         MATERIAL TYPE: {material_type}
 
-        Think step by step:
+        Think through this problem step by step with INNOVATIVE and UNCONVENTIONAL approaches:
 
-        1. UNDERSTAND THE CORE SCIENCE:
-        - What are the fundamental physical/chemical principles involved?
-        - What molecular mechanisms enable the desired properties?
-        - What are the key performance metrics?
+        STEP 1: DEEP SCIENTIFIC UNDERSTANDING
+        - What are the FUNDAMENTAL physical/chemical principles at play?
+        - What molecular mechanisms and quantum effects are relevant?
+        - What are the key structure-property relationships?
+        - Consider electronic structure, band theory, molecular orbitals, interfacial effects
 
-        2. IDENTIFY CHEMICAL STRATEGIES:
-        - What chemical classes could provide the required functionality?
-        - What molecular structures or functional groups are needed?
-        - Consider both organic and inorganic options
+        STEP 2: BREAKTHROUGH THINKING
+        - What UNCONVENTIONAL material classes could work?
+        - What BIO-INSPIRED or NATURE-MIMICKING approaches could help?
+        - What NANOSCALE or QUANTUM effects could be leveraged?
+        - What MULTIFUNCTIONAL or SMART material concepts apply?
 
-        3. GENERATE SEARCH STRATEGY:
-        - What specific compounds or material classes should we search for?
-        - What are the key PubChem search terms?
-        - Consider both conventional and unconventional options
+        STEP 3: ADVANCED SEARCH STRATEGY
+        - Generate DIVERSE and INNOVATIVE search terms covering:
+          * Electronic/optical properties
+          * Structural motifs
+          * Functional groups
+          * Application-specific terms
+          * Emerging material classes
+        - Think BEYOND conventional classifications
 
-        4. FORMULATION APPROACH:
-        - Should we use single compounds or mixtures?
-        - What combination strategies might work?
-        - Consider solute-solvent systems, composites, etc.
+        STEP 4: CREATIVE FORMULATION APPROACH
+        - What NOVEL combinations could create synergistic effects?
+        - How can we design MULTI-COMPONENT systems?
+        - What SOLUTE-SOLVENT-ADDITIVE combinations?
+        - Consider COMPOSITES, HYBRIDS, NANOCOMPOSITES
 
-        Return a JSON with this structure:
+        Return a RICH, DETAILED JSON with this structure:
         {{
-            "scientific_analysis": "Detailed scientific reasoning",
-            "key_mechanisms": ["list", "of", "key", "mechanisms"],
-            "target_compound_classes": ["class1", "class2", "class3"],
-            "specific_compounds": ["compound1", "compound2"],
+            "deep_scientific_analysis": "Comprehensive scientific reasoning with quantum, molecular, and structural insights",
+            "key_physical_mechanisms": ["list", "of", "fundamental", "mechanisms"],
+            "innovative_approaches": ["unconventional_approach1", "unconventional_approach2"],
+            "target_material_classes": ["advanced_class1", "emerging_class2", "unconventional_class3"],
+            "specific_functional_groups": ["group1", "group2", "group3"],
+            "quantum_considerations": ["quantum_effect1", "quantum_effect2"],
             "search_strategy": {{
-                "primary_terms": ["term1", "term2"],
-                "secondary_terms": ["term3", "term4"],
-                "innovative_terms": ["unconventional_term1", "unconventional_term2"]
+                "electronic_properties": ["term1", "term2", "term3"],
+                "structural_features": ["feature1", "feature2", "feature3"],
+                "functional_groups": ["group1", "group2", "group3"],
+                "application_terms": ["application1", "application2"],
+                "innovative_concepts": ["concept1", "concept2", "concept3"]
             }},
-            "formulation_approach": "Description of formulation strategy",
-            "expected_challenges": ["challenge1", "challenge2"],
-            "innovative_ideas": ["idea1", "idea2"]
+            "formulation_philosophy": "Description of innovative formulation strategy",
+            "synergistic_combinations": ["combination1", "combination2"],
+            "predicted_challenges": ["challenge1", "challenge2"],
+            "breakthrough_ideas": ["innovative_idea1", "innovative_idea2", "innovative_idea3"]
         }}
 
-        Be specific, scientific, and innovative!
+        Be CREATIVE, SCIENTIFICALLY RIGOROUS, and INNOVATIVE!
+        Think like a Nobel Prize winner discovering new material paradigms!
         """
 
         try:
-            if not self.model:
-                raise Exception("AI model not initialized")
-                
             response = self.model.generate_content(prompt)
             response_text = response.text
             
@@ -99,94 +104,61 @@ class AIStrategist:
                 strategy = json.loads(json_str)
                 return strategy
             else:
-                self.logger.warning("No JSON found in AI response, using fallback")
-                return self._create_fallback_strategy(challenge_text, material_type)
+                return self._create_innovative_fallback(challenge_text, material_type)
                 
         except Exception as e:
-            self.logger.error(f"Error in AI thinking: {e}")
-            return self._create_fallback_strategy(challenge_text, material_type)
+            self.logger.error(f"Error in deep scientific analysis: {e}")
+            return self._create_innovative_fallback(challenge_text, material_type)
 
     @cached
-    def predict_property_enhancement(self, formulation: Dict, target_properties: Dict) -> Dict[str, Any]:
-        """AI prediction of how formulation modifications might enhance properties"""
-        composition = formulation.get('composition', [])
-        comp_names = [comp.get('name', 'Unknown') for comp in composition]
-        
-        prompt = f"""
-        As a computational chemist, predict how this formulation might be enhanced:
-
-        CURRENT FORMULATION: {', '.join(comp_names)}
-        TARGET PROPERTIES: {json.dumps(target_properties, indent=2)}
-
-        Analyze:
-        1. Potential synergistic effects between components
-        2. How adding/modifying components could improve properties
-        3. What physical/chemical mechanisms could be leveraged
-        4. Specific compound suggestions for enhancement
-
-        Return JSON:
-        {{
-            "synergy_analysis": "Analysis of component interactions",
-            "enhancement_strategies": ["strategy1", "strategy2"],
-            "suggested_additives": ["additive1", "additive2"],
-            "predicted_improvements": {{
-                "property1": "expected improvement",
-                "property2": "expected improvement"
-            }},
-            "molecular_mechanisms": ["mechanism1", "mechanism2"]
-        }}
+    def generate_quantum_insights(self, formulation: Dict, challenge: str) -> Dict[str, Any]:
         """
-
-        try:
-            if not self.model:
-                return {}
-                
-            response = self.model.generate_content(prompt)
-            response_text = response.text
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-            else:
-                return {}
-        except Exception as e:
-            self.logger.error(f"Error in property enhancement prediction: {e}")
-            return {}
-
-    @cached
-    def evaluate_formulation_science(self, formulation: Dict, strategy: Dict) -> Dict[str, Any]:
-        """Scientific evaluation of formulation based on computational chemistry principles"""
+        Generate quantum mechanical insights for formulations
+        """
         composition = formulation.get('composition', [])
         comp_names = [comp.get('name', 'Unknown') for comp in composition]
         
         prompt = f"""
-        As a computational materials scientist, provide a scientific evaluation:
+        As a QUANTUM CHEMISTRY expert, analyze this formulation for electronic and quantum properties:
 
         FORMULATION: {', '.join(comp_names)}
-        INTENDED APPLICATION: {strategy.get('scientific_analysis', 'Unknown')}
+        CHALLENGE: {challenge}
 
-        Evaluate based on:
-        1. Molecular compatibility and potential interactions
-        2. Electronic structure considerations
-        3. Thermodynamic feasibility
-        4. Kinetic stability
-        5. Potential degradation pathways
-        6. Scalability and practical implementation
+        Analyze from FIRST PRINCIPLES:
 
-        Return JSON:
+        1. ELECTRONIC STRUCTURE:
+        - Predicted HOMO-LUMO gaps and band structures
+        - Charge transport mechanisms
+        - Exciton formation and dynamics
+        - Interface electronic properties
+
+        2. QUANTUM EFFECTS:
+        - Quantum confinement possibilities
+        - Spin-related phenomena
+        - Coherence and entanglement considerations
+        - Many-body effects
+
+        3. MOLECULAR INTERACTIONS:
+        - Orbital overlap and hybridization
+        - Charge transfer complexes
+        - Polaronic effects
+        - Defect states and trapping
+
+        Return detailed quantum insights:
         {{
-            "scientific_feasibility": "High/Medium/Low with reasoning",
-            "key_advantages": ["advantage1", "advantage2"],
-            "potential_issues": ["issue1", "issue2"],
-            "molecular_interactions": "Description of molecular-level interactions",
-            "stability_assessment": "Stability analysis",
-            "improvement_recommendations": ["recommendation1", "recommendation2"]
+            "electronic_structure": {{
+                "predicted_band_gap": "estimated range with reasoning",
+                "charge_transport": "mechanisms and efficiency",
+                "interface_properties": "electronic interface behavior"
+            }},
+            "quantum_phenomena": ["phenomenon1", "phenomenon2"],
+            "molecular_orbital_analysis": "HOMO-LUMO and orbital interactions",
+            "quantum_efficiency_factors": ["factor1", "factor2"],
+            "recommendations_for_enhancement": ["recommendation1", "recommendation2"]
         }}
         """
 
         try:
-            if not self.model:
-                return {}
-                
             response = self.model.generate_content(prompt)
             response_text = response.text
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
@@ -195,23 +167,90 @@ class AIStrategist:
             else:
                 return {}
         except Exception as e:
-            self.logger.error(f"Error in scientific evaluation: {e}")
+            self.logger.error(f"Error generating quantum insights: {e}")
             return {}
 
-    def _create_fallback_strategy(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
-        """Fallback strategy when AI thinking fails"""
-        self.logger.info("Using fallback strategy")
+    @cached
+    def creative_material_design(self, base_strategy: Dict, compounds_found: List[Dict]) -> Dict[str, Any]:
+        """
+        Use AI to creatively design material combinations based on available compounds
+        """
+        compound_names = [comp.get('name', 'Unknown') for comp in compounds_found[:20]]  # Limit to top 20
+        
+        prompt = f"""
+        You are a CREATIVE MATERIALS DESIGNER AI. Design innovative formulations using available compounds.
+
+        BASE STRATEGY: {json.dumps(base_strategy, indent=2)}
+        AVAILABLE COMPOUNDS: {', '.join(compound_names)}
+
+        Design INNOVATIVE formulations by thinking CREATIVELY:
+
+        1. UNCONVENTIONAL COMBINATIONS:
+        - Mix different chemical classes for emergent properties
+        - Create multi-phase systems
+        - Design core-shell or layered structures
+
+        2. SYNERGISTIC EFFECTS:
+        - Identify compounds that could work together synergistically
+        - Design energy/electron transfer systems
+        - Create catalytic or amplifying combinations
+
+        3. NANOSCALE ENGINEERING:
+        - Design nanocomposite approaches
+        - Consider quantum dot or nanoparticle incorporation
+        - Plan interfacial engineering
+
+        4. MULTIFUNCTIONAL DESIGN:
+        - Combine electronic, optical, and mechanical functions
+        - Design stimuli-responsive systems
+        - Create self-healing or adaptive materials
+
+        Return creative formulation strategies:
+        {{
+            "innovative_combinations": [
+                {{
+                    "name": "creative combination name",
+                    "components": ["compound1", "compound2", "compound3"],
+                    "rationale": "scientific reasoning for this combination",
+                    "expected_properties": ["property1", "property2"],
+                    "synergistic_mechanisms": ["mechanism1", "mechanism2"]
+                }}
+            ],
+            "nanoscale_designs": ["design1", "design2"],
+            "multifunctional_approaches": ["approach1", "approach2"],
+            "emerging_property_predictions": ["prediction1", "prediction2"]
+        }}
+        """
+
+        try:
+            response = self.model.generate_content(prompt)
+            response_text = response.text
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            else:
+                return {}
+        except Exception as e:
+            self.logger.error(f"Error in creative material design: {e}")
+            return {}
+
+    def _create_innovative_fallback(self, challenge_text: str, material_type: str) -> Dict[str, Any]:
+        """Create innovative fallback strategy"""
         return {
-            "scientific_analysis": f"Develop {material_type} for {challenge_text}",
-            "key_mechanisms": ["basic functionality"],
-            "target_compound_classes": [material_type],
-            "specific_compounds": [],
+            "deep_scientific_analysis": f"Advanced analysis for {material_type} addressing {challenge_text}",
+            "key_physical_mechanisms": ["electronic transport", "optical absorption", "quantum effects"],
+            "innovative_approaches": ["nanocomposite design", "multifunctional materials", "bio-inspired structures"],
+            "target_material_classes": ["advanced polymers", "quantum materials", "hybrid composites"],
             "search_strategy": {
-                "primary_terms": [material_type, "chemical compound"],
-                "secondary_terms": [],
-                "innovative_terms": []
+                "electronic_properties": ["semiconductor", "conductor", "photovoltaic"],
+                "structural_features": ["nanostructured", "porous", "layered"],
+                "functional_groups": ["conjugated", "aromatic", "charge_transfer"],
+                "application_terms": [material_type, "advanced material", "functional material"],
+                "innovative_concepts": ["emerging materials", "quantum materials", "smart materials"]
             },
-            "formulation_approach": "Standard formulation approach",
-            "expected_challenges": ["General implementation challenges"],
-            "innovative_ideas": ["Explore standard options"]
+            "breakthrough_ideas": [
+                "Explore quantum confinement effects",
+                "Design multi-component synergistic systems",
+                "Incorporate bio-inspired functionality"
+            ]
         }
