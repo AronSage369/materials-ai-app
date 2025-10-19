@@ -358,21 +358,23 @@ class AdvancedMaterialsDiscoveryApp:
                 st.error(f"❌ Scientific analysis failed: {e}")
                 return None
         
-        # Step 2: Intelligent Compound Search
-        with st.spinner("🔍 Searching for relevant compounds..."):
+        # Step 2: Intelligent Compound Search - ONLY PUBCHEM
+        with st.spinner("🔍 Searching PubChem for relevant compounds..."):
             try:
-                if (COMPONENT_AVAILABILITY.get('pubchem_manager', False) and 
-                    st.session_state.pubchem_manager is not None):
-                    
-                    compounds = st.session_state.pubchem_manager.intelligent_compound_search(
-                        scientific_analysis, search_strategy, config['material_type']
-                    )
-                else:
-                    st.warning("⚠️ PubChem Manager not available, using fallback compounds")
-                    compounds = self._get_fallback_compounds(config['material_type'])
+                if not COMPONENT_AVAILABILITY.get('pubchem_manager', False) or st.session_state.pubchem_manager is None:
+                    st.error("❌ PubChem Manager not available. Cannot search for compounds.")
+                    return None
+                
+                compounds = st.session_state.pubchem_manager.intelligent_compound_search(
+                    scientific_analysis, search_strategy, config['material_type']
+                )
+                
+                if not compounds:
+                    st.error("❌ No compounds found in PubChem. Try a different material type or challenge description.")
+                    return None
                 
                 results['compounds'] = compounds
-                st.success(f"✅ Found {len(compounds)} compounds")
+                st.success(f"✅ Found {len(compounds)} compounds from PubChem")
             except Exception as e:
                 st.error(f"❌ Compound search failed: {e}")
                 return None
@@ -455,51 +457,6 @@ class AdvancedMaterialsDiscoveryApp:
                 return None
         
         return results
-
-    def _get_fallback_compounds(self, material_type: str) -> List[Dict]:
-        """Provide fallback compounds when PubChem is not available"""
-        fallback_compounds = {
-            'solvent': [
-                {'cid': 887, 'name': 'Methanol', 'molecular_weight': 32.04, 'smiles': 'CO', 'category': 'balanced'},
-                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
-                {'cid': 6344, 'name': 'Ethanol', 'molecular_weight': 46.07, 'smiles': 'CCO', 'category': 'balanced'},
-                {'cid': 6579, 'name': 'Acetone', 'molecular_weight': 58.08, 'smiles': 'CC(=O)C', 'category': 'balanced'},
-            ],
-            'coolant': [
-                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
-                {'cid': 174, 'name': 'Ethylene Glycol', 'molecular_weight': 62.07, 'smiles': 'OCCO', 'category': 'specialist'},
-                {'cid': 1030, 'name': 'Propylene Glycol', 'molecular_weight': 76.09, 'smiles': 'CC(O)CO', 'category': 'specialist'},
-            ],
-            'polymer': [
-                {'cid': 6325, 'name': 'Polyethylene', 'molecular_weight': 28000, 'smiles': 'C=C', 'category': 'balanced'},
-                {'cid': 76958, 'name': 'Polypropylene', 'molecular_weight': 42000, 'smiles': 'CC=C', 'category': 'balanced'},
-            ],
-            'absorbent': [
-                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
-                {'cid': 24823, 'name': 'Silica Gel', 'molecular_weight': 60.08, 'smiles': 'O=[Si]=O', 'category': 'specialist'},
-            ],
-            'catalyst': [
-                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
-                {'cid': 222, 'name': 'Ammonia', 'molecular_weight': 17.03, 'smiles': 'N', 'category': 'specialist'},
-            ],
-            'lubricant': [
-                {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
-                {'cid': 24748, 'name': 'Mineral Oil', 'molecular_weight': 400.0, 'smiles': 'CCCCCCCCCCCCCCCC', 'category': 'balanced'},
-            ],
-            'electronic': [
-                {'cid': 13730, 'name': 'Graphene', 'molecular_weight': 12.01, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
-                {'cid': 123591, 'name': 'Carbon Nanotube', 'molecular_weight': 240.22, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
-            ],
-            'optical': [
-                {'cid': 13730, 'name': 'Graphene', 'molecular_weight': 12.01, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
-                {'cid': 444095, 'name': 'Quantum Dot', 'molecular_weight': 200.0, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
-            ],
-            'composite': [
-                {'cid': 24261, 'name': 'Silicon Dioxide', 'molecular_weight': 60.08, 'smiles': 'O=[Si]=O', 'category': 'inorganic'},
-                {'cid': 14769, 'name': 'Aluminum Oxide', 'molecular_weight': 101.96, 'smiles': 'O=[Al]O[Al]=O', 'category': 'inorganic'},
-            ]
-        }
-        return fallback_compounds.get(material_type, fallback_compounds['solvent'])
 
     def _extract_target_properties(self, scientific_analysis: Dict, user_target_props: Dict) -> Dict[str, Any]:
         """Extract target properties from scientific analysis and user input"""
@@ -669,4 +626,112 @@ class AdvancedMaterialsDiscoveryApp:
                 'Strategy Alignment': formulation.get('strategy_alignment', 0),
                 'Chemical Diversity': formulation.get('chemical_diversity', 0),
                 'Complexity Score': formulation.get('complexity_score', 0),
-                'Synergy Potential': formulation.get('synergy_p
+                'Synergy Potential': formulation.get('synergy_potential', 0),
+                'Compatibility Risk': formulation.get('compatibility_risk', 0)
+            }
+            
+            for metric, score in scores.items():
+                st.progress(score, text=f"{metric}: {score:.2f}")
+            
+            # Scientific evaluation
+            st.subheader("Scientific Context")
+            st.write(f"**Agent Type:** {formulation.get('agent_type', 'Unknown')}")
+            st.write(f"**Innovation Level:** {formulation.get('agent_innovation_level', 0):.2f}")
+            
+            # Computational insights
+            if formulation.get('computational_predictions'):
+                st.subheader("Computational Predictions")
+                for prop_name, prediction in formulation['computational_predictions'].items():
+                    st.write(f"**{prop_name}:** {prediction.get('value', 'N/A')} {prediction.get('units', '')}")
+                    st.write(f"*Confidence: {prediction.get('confidence', 0):.2f}*")
+                    st.write(f"*Reasoning: {prediction.get('reasoning', 'No reasoning available')}*")
+            
+            # Compatibility warnings
+            if formulation.get('compatibility_warnings'):
+                st.subheader("Compatibility Assessment")
+                for warning in formulation['compatibility_warnings']:
+                    if 'HIGH' in warning or 'EXTREME' in warning:
+                        st.error(warning)
+                    elif 'Medium' in warning:
+                        st.warning(warning)
+                    else:
+                        st.info(warning)
+
+    def _create_visualizations(self, formulations: List[Dict]):
+        """Create visualizations for formulations"""
+        st.subheader("📈 Formulation Analysis")
+        
+        # Score distribution
+        scores = [f.get('overall_score', 0) for f in formulations]
+        fig = px.histogram(x=scores, nbins=20, title="Score Distribution", 
+                          labels={'x': 'Overall Score', 'y': 'Count'})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Innovation vs Compatibility scatter plot
+        innovation_scores = [f.get('innovation_score', 0) for f in formulations]
+        compatibility_scores = [1 - f.get('compatibility_risk', 0) for f in formulations]
+        
+        fig = px.scatter(x=innovation_scores, y=compatibility_scores, 
+                        title="Innovation vs Compatibility",
+                        labels={'x': 'Innovation Score', 'y': 'Compatibility Score'})
+        st.plotly_chart(fig, use_container_width=True)
+
+    def run(self):
+        """Main application runner"""
+        # Render sidebar and get configuration
+        config = self.render_sidebar()
+        
+        # Check if components are initialized
+        if not st.session_state.initialized:
+            st.info("👆 Please enter your Gemini API key in the sidebar to get started")
+            return
+        
+        # Render main interface
+        result = self.render_main_interface()
+        if result is None:
+            return
+            
+        challenge_text, target_properties = result
+        
+        # Run analysis button
+        if st.button("🚀 Run Advanced Analysis", type="primary", use_container_width=True):
+            if not challenge_text.strip():
+                st.error("❌ Please describe your materials challenge")
+                return
+            
+            # Check if PubChem is available
+            if not COMPONENT_AVAILABILITY.get('pubchem_manager', False):
+                st.error("❌ PubChem Manager is not available. Cannot search for compounds.")
+                return
+            
+            # Run the analysis
+            results = self.run_advanced_analysis(challenge_text, config, target_properties)
+            
+            if results:
+                # Store results in session state
+                st.session_state.analysis_results = results
+                
+                # Display results
+                self.display_results(results)
+                
+                # Download option
+                st.download_button(
+                    label="📥 Download Results (JSON)",
+                    data=json.dumps(results, indent=2),
+                    file_name="materials_analysis_results.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+            else:
+                st.error("❌ Analysis failed. Please check your inputs and try again.")
+        
+        # Display previous results if available
+        if st.session_state.analysis_results:
+            st.header("📋 Previous Results")
+            if st.button("Show Previous Results", use_container_width=True):
+                self.display_results(st.session_state.analysis_results)
+
+# Run the application
+if __name__ == "__main__":
+    app = AdvancedMaterialsDiscoveryApp()
+    app.run()
