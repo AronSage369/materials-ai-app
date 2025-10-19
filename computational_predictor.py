@@ -2,7 +2,7 @@ import numpy as np
 from typing import Dict, List, Any, Tuple
 import re
 import logging
-from utils import cached, MemoryManager
+import random
 
 # Try to import RDKit with fallback
 try:
@@ -27,7 +27,6 @@ class ComputationalPredictor:
             'photo_stability': self.predict_photo_stability
         }
         
-    @cached
     def predict_advanced_properties(self, formulation: Dict, target_properties: Dict) -> Dict[str, Any]:
         """Predict advanced electronic and optical properties using computational methods"""
         advanced_props = {}
