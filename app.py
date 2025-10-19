@@ -207,7 +207,7 @@ class AdvancedMaterialsDiscoveryApp:
                 st.sidebar.error("❌ Initialization failed")
         
         # Material type selection
-        material_types = ['solvent', 'coolant', 'absorbent', 'catalyst', 'polymer', 'lubricant']
+        material_types = ['solvent', 'coolant', 'absorbent', 'catalyst', 'polymer', 'lubricant', 'electronic', 'optical', 'composite']
         material_type = st.sidebar.selectbox(
             "📦 Material Type",
             material_types,
@@ -485,6 +485,18 @@ class AdvancedMaterialsDiscoveryApp:
             'lubricant': [
                 {'cid': 962, 'name': 'Water', 'molecular_weight': 18.02, 'smiles': 'O', 'category': 'balanced'},
                 {'cid': 24748, 'name': 'Mineral Oil', 'molecular_weight': 400.0, 'smiles': 'CCCCCCCCCCCCCCCC', 'category': 'balanced'},
+            ],
+            'electronic': [
+                {'cid': 13730, 'name': 'Graphene', 'molecular_weight': 12.01, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
+                {'cid': 123591, 'name': 'Carbon Nanotube', 'molecular_weight': 240.22, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
+            ],
+            'optical': [
+                {'cid': 13730, 'name': 'Graphene', 'molecular_weight': 12.01, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
+                {'cid': 444095, 'name': 'Quantum Dot', 'molecular_weight': 200.0, 'smiles': 'C1=CC=CC=C1', 'category': 'nanomaterial'},
+            ],
+            'composite': [
+                {'cid': 24261, 'name': 'Silicon Dioxide', 'molecular_weight': 60.08, 'smiles': 'O=[Si]=O', 'category': 'inorganic'},
+                {'cid': 14769, 'name': 'Aluminum Oxide', 'molecular_weight': 101.96, 'smiles': 'O=[Al]O[Al]=O', 'category': 'inorganic'},
             ]
         }
         return fallback_compounds.get(material_type, fallback_compounds['solvent'])
@@ -657,107 +669,4 @@ class AdvancedMaterialsDiscoveryApp:
                 'Strategy Alignment': formulation.get('strategy_alignment', 0),
                 'Chemical Diversity': formulation.get('chemical_diversity', 0),
                 'Complexity Score': formulation.get('complexity_score', 0),
-                'Synergy Potential': formulation.get('synergy_potential', 0),
-                'Compatibility Risk': formulation.get('compatibility_risk', 0)
-            }
-            
-            for metric, score in scores.items():
-                st.progress(score, text=f"{metric}: {score:.2f}")
-            
-            # Scientific evaluation
-            st.subheader("Scientific Context")
-            st.write(f"**Agent Type:** {formulation.get('agent_type', 'Unknown')}")
-            st.write(f"**Innovation Level:** {formulation.get('agent_innovation_level', 0):.2f}")
-            
-            # Computational insights
-            if formulation.get('computational_predictions'):
-                st.subheader("Computational Predictions")
-                for prop_name, prediction in formulation['computational_predictions'].items():
-                    st.write(f"**{prop_name}:** {prediction.get('value', 'N/A')} {prediction.get('units', '')}")
-                    st.write(f"*Confidence: {prediction.get('confidence', 0):.2f}*")
-                    st.write(f"*Reasoning: {prediction.get('reasoning', 'No reasoning available')}*")
-            
-            # Compatibility warnings
-            if formulation.get('compatibility_warnings'):
-                st.subheader("Compatibility Assessment")
-                for warning in formulation['compatibility_warnings']:
-                    if 'HIGH' in warning or 'EXTREME' in warning:
-                        st.error(warning)
-                    elif 'Medium' in warning:
-                        st.warning(warning)
-                    else:
-                        st.info(warning)
-
-    def _create_visualizations(self, formulations: List[Dict]):
-        """Create visualizations for formulations"""
-        st.subheader("📈 Formulation Analysis")
-        
-        # Score distribution
-        scores = [f.get('overall_score', 0) for f in formulations]
-        fig = px.histogram(x=scores, nbins=20, title="Score Distribution", 
-                          labels={'x': 'Overall Score', 'y': 'Count'})
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Innovation vs Compatibility scatter plot
-        innovation_scores = [f.get('innovation_score', 0) for f in formulations]
-        compatibility_scores = [1 - f.get('compatibility_risk', 0) for f in formulations]
-        
-        fig = px.scatter(x=innovation_scores, y=compatibility_scores, 
-                        title="Innovation vs Compatibility",
-                        labels={'x': 'Innovation Score', 'y': 'Compatibility Score'})
-        st.plotly_chart(fig, use_container_width=True)
-
-    def run(self):
-        """Main application runner"""
-        # Render sidebar and get configuration
-        config = self.render_sidebar()
-        
-        # Check if components are initialized
-        if not st.session_state.initialized:
-            st.info("👆 Please enter your Gemini API key in the sidebar to get started")
-            return
-        
-        # Render main interface
-        result = self.render_main_interface()
-        if result is None:
-            return
-            
-        challenge_text, target_properties = result
-        
-        # Run analysis button
-        if st.button("🚀 Run Advanced Analysis", type="primary", use_container_width=True):
-            if not challenge_text.strip():
-                st.error("❌ Please describe your materials challenge")
-                return
-            
-            # Run the analysis
-            results = self.run_advanced_analysis(challenge_text, config, target_properties)
-            
-            if results:
-                # Store results in session state
-                st.session_state.analysis_results = results
-                
-                # Display results
-                self.display_results(results)
-                
-                # Download option
-                st.download_button(
-                    label="📥 Download Results (JSON)",
-                    data=json.dumps(results, indent=2),
-                    file_name="materials_analysis_results.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-            else:
-                st.error("❌ Analysis failed. Please check your inputs and try again.")
-        
-        # Display previous results if available
-        if st.session_state.analysis_results:
-            st.header("📋 Previous Results")
-            if st.button("Show Previous Results", use_container_width=True):
-                self.display_results(st.session_state.analysis_results)
-
-# Run the application
-if __name__ == "__main__":
-    app = AdvancedMaterialsDiscoveryApp()
-    app.run()
+                'Synergy Potential': formulation.get('synergy_p
