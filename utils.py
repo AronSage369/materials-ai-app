@@ -50,13 +50,14 @@ class SimpleCache:
 
 def cached(func):
     """Decorator for caching function results"""
+    cache = SimpleCache()
+    
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Skip caching if explicitly disabled
         if kwargs.pop('no_cache', False):
             return func(*args, **kwargs)
             
-        cache = SimpleCache()
         key = f"{func.__module__}.{func.__name__}_{cache.get_key((args, kwargs))}"
         
         result = cache.get(key)
@@ -102,6 +103,21 @@ class DataValidator:
         total_percentage = sum(comp.get('mass_percentage', 0) for comp in formulation['composition'])
         if abs(total_percentage - 100.0) > 0.1:
             return False, f"Mass percentages must sum to 100%, got {total_percentage}"
+        
+        return True, "Valid"
+
+    @staticmethod
+    def validate_component(component: Dict) -> Tuple[bool, str]:
+        """Validate component structure"""
+        required_keys = ['name', 'mass_percentage']
+        
+        for key in required_keys:
+            if key not in component:
+                return False, f"Missing required key: {key}"
+        
+        mass_percentage = component.get('mass_percentage', 0)
+        if not (0 <= mass_percentage <= 100):
+            return False, f"Mass percentage must be between 0 and 100, got {mass_percentage}"
         
         return True, "Valid"
 
