@@ -13,8 +13,8 @@ from functools import wraps
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class SimpleCache:
-    """Simple in-memory cache without diskcache dependency"""
+class CacheManager:
+    """Simple in-memory cache manager without diskcache dependency"""
     def __init__(self, max_size=1000):
         self.cache = {}
         self.max_size = max_size
@@ -50,7 +50,7 @@ class SimpleCache:
 
 def cached(func):
     """Decorator for caching function results"""
-    cache = SimpleCache()
+    cache = CacheManager()
     
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -122,6 +122,6 @@ class DataValidator:
         return True, "Valid"
 
 # Global instances
-cache_manager = SimpleCache()
+cache_manager = CacheManager()
 memory_manager = MemoryManager()
 data_validator = DataValidator()
