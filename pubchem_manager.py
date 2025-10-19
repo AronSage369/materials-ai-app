@@ -7,16 +7,17 @@ import random
 import time
 import logging
 import numpy as np
-from utils import cached
 
-class IntelligentPubChemSearcher:
+class PubChemManager:
     """
-    AI-driven PubChem search that uses intelligent strategies to find innovative compounds
+    Intelligent PubChem search manager that uses AI-generated strategies
+    to explore the entire chemical space dynamically
     """
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.session = None
+        self.search_cache = {}
         
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -26,129 +27,119 @@ class IntelligentPubChemSearcher:
         if self.session:
             await self.session.close()
 
-    @cached
-    def ai_driven_compound_search(self, strategy: Dict, material_type: str, max_compounds: int = 200) -> List[Dict]:
+    def intelligent_compound_search(self, scientific_analysis: Dict, search_strategy: Dict, 
+                                  material_type: str, max_compounds: int = 200) -> List[Dict]:
         """
-        Use AI-generated strategy to perform intelligent compound search
+        Perform intelligent compound search using AI-generated strategies
         """
-        self.logger.info(f"🚀 Starting AI-driven search for {material_type}")
+        self.logger.info(f"🚀 Starting intelligent search for {material_type}")
         
         all_compounds = []
-        search_strategy = strategy.get('search_strategy', {})
         
-        # Search across all AI-suggested categories
-        search_categories = [
-            *search_strategy.get('electronic_properties', []),
-            *search_strategy.get('structural_features', []),
-            *search_strategy.get('functional_groups', []),
-            *search_strategy.get('application_terms', []),
-            *search_strategy.get('innovative_concepts', [])
-        ]
+        # Extract search dimensions from strategy
+        search_dimensions = search_strategy.get('search_dimensions', {})
         
-        # Remove duplicates and limit
-        search_terms = list(set(search_categories))[:30]
-        
-        self.logger.info(f"🔍 Search terms: {search_terms}")
-        
-        # Multi-strategy search
-        for strategy_name, search_method in [
-            ('electronic', self._search_electronic_materials),
-            ('structural', self._search_structural_features),
-            ('functional', self._search_functional_groups),
-            ('innovative', self._search_innovative_concepts)
-        ]:
+        # Search across all dimensions
+        for dimension_name, search_terms in search_dimensions.items():
             try:
-                compounds = search_method(strategy, search_terms, max_compounds // 4)
+                compounds = self._search_dimension(dimension_name, search_terms, max_compounds // 5)
                 all_compounds.extend(compounds)
-                self.logger.info(f"✅ {strategy_name} search found {len(compounds)} compounds")
-                time.sleep(0.5)  # Rate limiting
+                self.logger.info(f"✅ {dimension_name} search found {len(compounds)} compounds")
+                time.sleep(0.3)  # Rate limiting
             except Exception as e:
-                self.logger.error(f"❌ {strategy_name} search failed: {e}")
+                self.logger.error(f"❌ {dimension_name} search failed: {e}")
         
         # Remove duplicates and filter
         unique_compounds = self._remove_duplicates(all_compounds)
-        filtered_compounds = [c for c in unique_compounds if self._advanced_filter(c, strategy)]
+        filtered_compounds = [c for c in unique_compounds if self._advanced_filter(c, scientific_analysis)]
         
-        # Enhanced scoring
-        scored_compounds = self._ai_enhanced_scoring(filtered_compounds, strategy)
+        # Score compounds based on relevance
+        scored_compounds = self._score_compounds(filtered_compounds, scientific_analysis)
         
         self.logger.info(f"🎯 Total unique compounds: {len(scored_compounds)}")
         return scored_compounds[:max_compounds]
 
-    def _search_electronic_materials(self, strategy: Dict, search_terms: List[str], max_results: int) -> List[Dict]:
-        """Search for electronic and optical materials"""
+    def _search_dimension(self, dimension_name: str, search_terms: List[str], max_results: int) -> List[Dict]:
+        """Search a specific dimension"""
         compounds = []
-        electronic_terms = strategy.get('search_strategy', {}).get('electronic_properties', [])
         
-        for term in electronic_terms[:10]:
+        for term in search_terms[:10]:  # Limit terms per dimension
             try:
-                results = pcp.get_compounds(term, 'name', listkey_count=15)
-                for compound in results:
-                    comp_data = self._extract_compound_data(compound)
-                    if comp_data and self._has_electronic_potential(comp_data):
-                        compounds.append(comp_data)
-                time.sleep(0.3)
+                # Use different search strategies based on dimension
+                if dimension_name == 'unconventional':
+                    results = self._innovative_search(term, max_results // 2)
+                elif dimension_name == 'bio_inspired':
+                    results = self._bio_inspired_search(term, max_results // 2)
+                else:
+                    results = self._standard_search(term, max_results // 3)
+                
+                compounds.extend(results)
             except Exception as e:
-                self.logger.warning(f"Electronic search failed for {term}: {e}")
+                self.logger.warning(f"Search failed for {term}: {e}")
         
         return compounds
 
-    def _search_structural_features(self, strategy: Dict, search_terms: List[str], max_results: int) -> List[Dict]:
-        """Search based on structural features"""
-        compounds = []
-        structural_terms = strategy.get('search_strategy', {}).get('structural_features', [])
-        
-        for term in structural_terms[:10]:
-            try:
-                results = pcp.get_compounds(term, 'name', listkey_count=12)
-                for compound in results:
-                    comp_data = self._extract_compound_data(compound)
-                    if comp_data:
-                        compounds.append(comp_data)
-                time.sleep(0.3)
-            except Exception as e:
-                self.logger.warning(f"Structural search failed for {term}: {e}")
-        
-        return compounds
+    def _standard_search(self, term: str, max_results: int) -> List[Dict]:
+        """Standard PubChem search"""
+        try:
+            results = pcp.get_compounds(term, 'name', listkey_count=max_results)
+            compounds = []
+            for compound in results:
+                comp_data = self._extract_compound_data(compound)
+                if comp_data:
+                    compounds.append(comp_data)
+            return compounds
+        except Exception as e:
+            self.logger.error(f"Standard search failed for {term}: {e}")
+            return []
 
-    def _search_functional_groups(self, strategy: Dict, search_terms: List[str], max_results: int) -> List[Dict]:
-        """Search based on functional groups"""
-        compounds = []
-        functional_terms = strategy.get('search_strategy', {}).get('functional_groups', [])
-        
-        for term in functional_terms[:10]:
-            try:
-                results = pcp.get_compounds(term, 'name', listkey_count=12)
-                for compound in results:
-                    comp_data = self._extract_compound_data(compound)
-                    if comp_data and self._has_relevant_functionality(comp_data, strategy):
-                        compounds.append(comp_data)
-                time.sleep(0.3)
-            except Exception as e:
-                self.logger.warning(f"Functional search failed for {term}: {e}")
-        
-        return compounds
+    def _innovative_search(self, term: str, max_results: int) -> List[Dict]:
+        """Search for innovative compounds"""
+        try:
+            # Add innovative modifiers to search
+            innovative_terms = [f"{term} nanoparticle", f"{term} quantum", f"{term} 2D", 
+                              f"{term} composite", f"{term} hybrid"]
+            
+            compounds = []
+            for innovative_term in innovative_terms:
+                try:
+                    results = pcp.get_compounds(innovative_term, 'name', listkey_count=5)
+                    for compound in results:
+                        comp_data = self._extract_compound_data(compound)
+                        if comp_data and self._is_innovative(comp_data):
+                            compounds.append(comp_data)
+                except:
+                    continue
+            
+            return compounds
+        except Exception as e:
+            self.logger.error(f"Innovative search failed for {term}: {e}")
+            return []
 
-    def _search_innovative_concepts(self, strategy: Dict, search_terms: List[str], max_results: int) -> List[Dict]:
-        """Search for innovative and emerging materials"""
-        compounds = []
-        innovative_terms = strategy.get('search_strategy', {}).get('innovative_concepts', [])
-        
-        for term in innovative_terms[:10]:
-            try:
-                results = pcp.get_compounds(term, 'name', listkey_count=10)
-                for compound in results:
-                    comp_data = self._extract_compound_data(compound)
-                    if comp_data and self._is_innovative(comp_data):
-                        compounds.append(comp_data)
-                time.sleep(0.3)
-            except Exception as e:
-                self.logger.warning(f"Innovative search failed for {term}: {e}")
-        
-        return compounds
+    def _bio_inspired_search(self, term: str, max_results: int) -> List[Dict]:
+        """Search for bio-inspired compounds"""
+        try:
+            bio_terms = [f"{term} enzyme", f"{term} protein", f"{term} natural", 
+                        f"{term} biomimetic", f"{term} bioinspired"]
+            
+            compounds = []
+            for bio_term in bio_terms:
+                try:
+                    results = pcp.get_compounds(bio_term, 'name', listkey_count=5)
+                    for compound in results:
+                        comp_data = self._extract_compound_data(compound)
+                        if comp_data and self._is_bio_relevant(comp_data):
+                            compounds.append(comp_data)
+                except:
+                    continue
+            
+            return compounds
+        except Exception as e:
+            self.logger.error(f"Bio-inspired search failed for {term}: {e}")
+            return []
 
     def _extract_compound_data(self, compound) -> Optional[Dict]:
-        """Extract comprehensive compound data"""
+        """Extract comprehensive compound data from PubChem"""
         try:
             properties = ['MolecularWeight', 'MolecularFormula', 'CanonicalSMILES', 
                          'IUPACName', 'XLogP', 'Complexity', 'HydrogenBondDonorCount',
@@ -176,8 +167,8 @@ class IntelligentPubChemSearcher:
             self.logger.error(f"Error extracting compound data: {e}")
             return None
 
-    def _advanced_filter(self, compound: Dict, strategy: Dict) -> bool:
-        """Advanced filtering based on AI strategy"""
+    def _advanced_filter(self, compound: Dict, scientific_analysis: Dict) -> bool:
+        """Advanced filtering based on scientific analysis"""
         try:
             # Basic sanity checks
             if not compound.get('molecular_weight') or compound['molecular_weight'] <= 0:
@@ -187,15 +178,15 @@ class IntelligentPubChemSearcher:
                 return False
             
             # Strategy-based filtering
-            scientific_analysis = strategy.get('deep_scientific_analysis', '').lower()
+            quantum_analysis = scientific_analysis.get('quantum_analysis', '').lower()
             
             # Filter for electronic materials if relevant
-            if any(word in scientific_analysis for word in ['electronic', 'semiconductor', 'conductor']):
+            if any(word in quantum_analysis for word in ['electronic', 'semiconductor', 'conductor']):
                 if not self._has_electronic_potential(compound):
                     return False
             
             # Filter for specific functional groups
-            target_groups = strategy.get('specific_functional_groups', [])
+            target_groups = scientific_analysis.get('critical_functional_groups', [])
             if target_groups and not self._has_target_functionality(compound, target_groups):
                 return False
             
@@ -218,38 +209,6 @@ class IntelligentPubChemSearcher:
         
         return any(indicator in name or indicator in smiles for indicator in electronic_indicators)
 
-    def _has_relevant_functionality(self, compound: Dict, strategy: Dict) -> bool:
-        """Check if compound has relevant functional groups"""
-        smiles = compound.get('smiles', '').lower()
-        target_groups = strategy.get('specific_functional_groups', [])
-        
-        if not target_groups:
-            return True
-            
-        functional_group_map = {
-            'conjugated': ['c=c', 'c#c', 'c1ccccc1'],
-            'aromatic': ['c1ccccc1', 'n1ccccc1'],
-            'charge_transfer': ['n', 'o', 's'],
-            'polar': ['oh', 'c=o', 'n', 'o']
-        }
-        
-        for target_group in target_groups:
-            if target_group in functional_group_map:
-                patterns = functional_group_map[target_group]
-                if any(pattern in smiles for pattern in patterns):
-                    return True
-        
-        return False
-
-    def _has_target_functionality(self, compound: Dict, target_groups: List[str]) -> bool:
-        """Check for specific target functional groups"""
-        smiles = compound.get('smiles', '').lower()
-        
-        for group in target_groups:
-            if group in smiles:
-                return True
-        return False
-
     def _is_innovative(self, compound: Dict) -> bool:
         """Check if compound is innovative/emerging"""
         name = compound.get('name', '').lower()
@@ -260,6 +219,27 @@ class IntelligentPubChemSearcher:
         ]
         
         return any(indicator in name for indicator in innovative_indicators)
+
+    def _is_bio_relevant(self, compound: Dict) -> bool:
+        """Check if compound is bio-relevant"""
+        name = compound.get('name', '').lower()
+        
+        bio_indicators = [
+            'enzyme', 'protein', 'lipid', 'sugar', 'amino', 'peptide',
+            'biological', 'natural', 'plant', 'animal', 'cell'
+        ]
+        
+        return any(indicator in name for indicator in bio_indicators)
+
+    def _has_target_functionality(self, compound: Dict, target_groups: List[str]) -> bool:
+        """Check for specific target functional groups"""
+        smiles = compound.get('smiles', '').lower()
+        name = compound.get('name', '').lower()
+        
+        for group in target_groups:
+            if group in smiles or group in name:
+                return True
+        return False
 
     def _remove_duplicates(self, compounds: List[Dict]) -> List[Dict]:
         """Remove duplicate compounds"""
@@ -274,28 +254,26 @@ class IntelligentPubChemSearcher:
         
         return unique_compounds
 
-    def _ai_enhanced_scoring(self, compounds: List[Dict], strategy: Dict) -> List[Dict]:
-        """AI-enhanced scoring of compounds"""
+    def _score_compounds(self, compounds: List[Dict], scientific_analysis: Dict) -> List[Dict]:
+        """Score compounds based on relevance to scientific analysis"""
         scored_compounds = []
         
         for compound in compounds:
             score = 0.5  # Base score
             
-            # Score based on relevance to strategy
-            scientific_analysis = strategy.get('deep_scientific_analysis', '').lower()
-            
-            # Electronic materials scoring
-            if any(word in scientific_analysis for word in ['electronic', 'optical', 'photovoltaic']):
+            # Score based on quantum requirements
+            quantum_analysis = scientific_analysis.get('quantum_analysis', '').lower()
+            if any(word in quantum_analysis for word in ['electronic', 'optical', 'photovoltaic']):
                 if self._has_electronic_potential(compound):
                     score += 0.3
             
-            # Complexity scoring (more complex molecules often have interesting properties)
+            # Score based on molecular complexity
             complexity = compound.get('complexity', 0)
             if complexity > 200:
                 score += 0.2
             
-            # Functional group scoring
-            target_groups = strategy.get('specific_functional_groups', [])
+            # Score based on functional groups
+            target_groups = scientific_analysis.get('critical_functional_groups', [])
             if target_groups and self._has_target_functionality(compound, target_groups):
                 score += 0.2
             
