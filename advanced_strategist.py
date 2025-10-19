@@ -16,7 +16,7 @@ class AdvancedStrategist:
         """Configure Gemini API"""
         try:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
         except Exception as e:
             raise Exception(f"Failed to configure Gemini API: {str(e)}")
 
