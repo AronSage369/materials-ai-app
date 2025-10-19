@@ -2,7 +2,6 @@ import re
 import logging
 from typing import Dict, List, Any, Tuple
 import numpy as np
-from utils import cached, MemoryManager
 
 class CompatibilityChecker:
     def __init__(self):
@@ -64,7 +63,6 @@ class CompatibilityChecker:
             'strong_base': r'sodium hydroxide|potassium hydroxide|NaOH|KOH'
         }
 
-    @cached
     def validate_all_formulations(self, formulations: List[Dict]) -> List[Dict]:
         """Validate chemical compatibility for all formulations"""
         for formulation in formulations:
