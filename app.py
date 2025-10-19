@@ -44,11 +44,11 @@ except ImportError as e:
 COMPONENT_AVAILABILITY = {}
 
 try:
-    from ai_strategist import AIStrategist
-    COMPONENT_AVAILABILITY['ai_strategist'] = True
+    from advanced_strategist import AdvancedStrategist
+    COMPONENT_AVAILABILITY['advanced_strategist'] = True
 except ImportError as e:
-    logger.error(f"Failed to import AIStrategist: {e}")
-    COMPONENT_AVAILABILITY['ai_strategist'] = False
+    logger.error(f"Failed to import AdvancedStrategist: {e}")
+    COMPONENT_AVAILABILITY['advanced_strategist'] = False
 
 try:
     from ai_engine import CreativeAIEngine
@@ -101,7 +101,7 @@ class AdvancedMaterialsDiscoveryApp:
         """Initialize session state variables"""
         if 'initialized' not in st.session_state:
             st.session_state.initialized = False
-            st.session_state.ai_strategist = None
+            st.session_state.advanced_strategist = None
             st.session_state.creative_engine = None
             st.session_state.computational_predictor = None
             st.session_state.pubchem_manager = None
@@ -120,16 +120,16 @@ class AdvancedMaterialsDiscoveryApp:
             
             # Show initialization progress
             with st.spinner("🔄 Initializing AI components..."):
-                # Initialize AI Strategist
-                if COMPONENT_AVAILABILITY.get('ai_strategist', False):
+                # Initialize Advanced Strategist
+                if COMPONENT_AVAILABILITY.get('advanced_strategist', False):
                     try:
-                        st.session_state.ai_strategist = AIStrategist(api_key)
-                        st.success("✅ AI Strategist initialized")
+                        st.session_state.advanced_strategist = AdvancedStrategist(api_key)
+                        st.success("✅ Advanced Strategist initialized")
                     except Exception as e:
-                        st.error(f"❌ AI Strategist initialization failed: {e}")
+                        st.error(f"❌ Advanced Strategist initialization failed: {e}")
                         return False
                 else:
-                    st.error("❌ AI Strategist not available")
+                    st.error("❌ Advanced Strategist not available")
                     return False
                 
                 # Initialize Creative AI Engine
@@ -259,7 +259,7 @@ class AdvancedMaterialsDiscoveryApp:
         st.subheader("🔧 System Status")
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("AI Strategist", "✅" if COMPONENT_AVAILABILITY.get('ai_strategist', False) else "❌")
+            st.metric("AI Strategist", "✅" if COMPONENT_AVAILABILITY.get('advanced_strategist', False) else "❌")
             st.metric("Creative Engine", "✅" if COMPONENT_AVAILABILITY.get('creative_engine', False) else "❌")
         with col2:
             st.metric("PubChem Search", "✅" if COMPONENT_AVAILABILITY.get('pubchem_manager', False) else "❌")
@@ -269,7 +269,7 @@ class AdvancedMaterialsDiscoveryApp:
             st.metric("Compatibility Checker", "✅" if COMPONENT_AVAILABILITY.get('compatibility_checker', False) else "❌")
         
         # Check if core components are available
-        if not COMPONENT_AVAILABILITY.get('ai_strategist', False) or not COMPONENT_AVAILABILITY.get('creative_engine', False):
+        if not COMPONENT_AVAILABILITY.get('advanced_strategist', False) or not COMPONENT_AVAILABILITY.get('creative_engine', False):
             st.error("""
             ❌ Core AI components are not available. Please check:
             - Ensure all Python files are in the same directory
@@ -341,16 +341,21 @@ class AdvancedMaterialsDiscoveryApp:
             
         results = {}
         
-        # Step 1: AI Strategic Thinking
-        with st.spinner("🧠 AI is thinking deeply about your challenge..."):
+        # Step 1: Advanced Scientific Analysis
+        with st.spinner("🧠 AI is performing deep scientific analysis..."):
             try:
-                strategy = st.session_state.ai_strategist.think_about_challenge(
+                scientific_analysis = st.session_state.advanced_strategist.deep_scientific_analysis(
                     challenge_text, config['material_type']
                 )
-                results['strategy'] = strategy
-                st.success("✅ AI strategy developed")
+                results['scientific_analysis'] = scientific_analysis
+                st.success("✅ Deep scientific analysis completed")
+                
+                # Generate search strategy
+                search_strategy = st.session_state.advanced_strategist.generate_innovative_search_strategy(scientific_analysis)
+                results['search_strategy'] = search_strategy
+                st.success("✅ Innovative search strategy developed")
             except Exception as e:
-                st.error(f"❌ AI thinking failed: {e}")
+                st.error(f"❌ Scientific analysis failed: {e}")
                 return None
         
         # Step 2: Intelligent Compound Search
@@ -358,13 +363,9 @@ class AdvancedMaterialsDiscoveryApp:
             try:
                 if (COMPONENT_AVAILABILITY.get('pubchem_manager', False) and 
                     st.session_state.pubchem_manager is not None):
-                    search_terms = (strategy.get('search_strategy', {})
-                                  .get('primary_terms', []) + 
-                                  strategy.get('search_strategy', {})
-                                  .get('innovative_terms', []))
                     
-                    compounds = st.session_state.pubchem_manager.find_compounds(
-                        strategy, config['material_type']
+                    compounds = st.session_state.pubchem_manager.intelligent_compound_search(
+                        scientific_analysis, search_strategy, config['material_type']
                     )
                 else:
                     st.warning("⚠️ PubChem Manager not available, using fallback compounds")
@@ -380,10 +381,10 @@ class AdvancedMaterialsDiscoveryApp:
         with st.spinner("🤖 Creative AI agents are designing formulations..."):
             try:
                 formulations = st.session_state.creative_engine.creative_formulation_generation(
-                    compounds, strategy, config['innovation_factor']
+                    compounds, search_strategy, config['innovation_factor']
                 )
                 results['formulations'] = formulations
-                st.success(f"✅ Generated {len(formulations)} formulations")
+                st.success(f"✅ Generated {len(formulations)} innovative formulations")
             except Exception as e:
                 st.error(f"❌ Formulation generation failed: {e}")
                 return None
@@ -391,7 +392,7 @@ class AdvancedMaterialsDiscoveryApp:
         # Step 4: Advanced Property Prediction
         with st.spinner("📊 Running computational predictions..."):
             try:
-                enhanced_target_props = self._extract_target_properties(strategy, target_properties)
+                enhanced_target_props = self._extract_target_properties(scientific_analysis, target_properties)
                 
                 # Property prediction (optional)
                 if (COMPONENT_AVAILABILITY.get('property_predictor', False) and 
@@ -441,12 +442,12 @@ class AdvancedMaterialsDiscoveryApp:
         # Step 6: AI Evaluation and Ranking
         with st.spinner("🎯 AI is evaluating and ranking formulations..."):
             try:
-                approved_formulations = self._ai_evaluation(formulations, strategy, config)
+                approved_formulations = self._ai_evaluation(formulations, scientific_analysis, config)
                 results['approved_formulations'] = approved_formulations
                 results['total_compounds_found'] = len(compounds)
                 results['total_formulations_generated'] = len(formulations)
-                results['ai_thinking'] = strategy.get('scientific_analysis', '')
-                results['innovative_ideas'] = strategy.get('innovative_ideas', [])
+                results['scientific_analysis'] = scientific_analysis
+                results['search_strategy'] = search_strategy
                 
                 st.success(f"✅ Analysis complete! Found {len(approved_formulations)} promising formulations")
             except Exception as e:
@@ -488,21 +489,21 @@ class AdvancedMaterialsDiscoveryApp:
         }
         return fallback_compounds.get(material_type, fallback_compounds['solvent'])
 
-    def _extract_target_properties(self, strategy: Dict, user_target_props: Dict) -> Dict[str, Any]:
-        """Extract target properties from AI strategy and user input"""
+    def _extract_target_properties(self, scientific_analysis: Dict, user_target_props: Dict) -> Dict[str, Any]:
+        """Extract target properties from scientific analysis and user input"""
         target_props = user_target_props.copy()
         
         # Add computational properties based on challenge type
-        scientific_analysis = strategy.get('scientific_analysis', '').lower()
+        quantum_analysis = scientific_analysis.get('quantum_analysis', '').lower()
         
-        if any(word in scientific_analysis for word in ['solar', 'photo', 'light']):
+        if any(word in quantum_analysis for word in ['solar', 'photo', 'light', 'electronic']):
             target_props.update({
                 'band_gap': {'target': 1.8, 'min': 1.2, 'max': 3.0, 'importance': 'high'},
                 'absorption_spectrum': {'target': 80, 'min': 50, 'importance': 'high'},
                 'quantum_efficiency': {'target': 70, 'min': 30, 'importance': 'high'}
             })
         
-        if any(word in scientific_analysis for word in ['electronic', 'conductor', 'mobility']):
+        if any(word in quantum_analysis for word in ['electronic', 'conductor', 'mobility']):
             target_props.update({
                 'electron_mobility': {'target': 10, 'min': 1, 'importance': 'high'},
                 'hole_mobility': {'target': 10, 'min': 1, 'importance': 'high'}
@@ -510,7 +511,7 @@ class AdvancedMaterialsDiscoveryApp:
         
         return target_props
 
-    def _ai_evaluation(self, formulations: List[Dict], strategy: Dict, config: Dict) -> List[Dict]:
+    def _ai_evaluation(self, formulations: List[Dict], scientific_analysis: Dict, config: Dict) -> List[Dict]:
         """AI-driven evaluation of formulations"""
         approved = []
         
@@ -575,22 +576,33 @@ class AdvancedMaterialsDiscoveryApp:
             else:
                 st.metric("Average Score", "N/A")
         
-        # AI Strategy
-        with st.expander("🧠 AI Strategy Analysis"):
-            strategy = results['strategy']
-            st.subheader("Scientific Analysis")
-            st.write(strategy.get('scientific_analysis', 'No analysis available'))
+        # Scientific Analysis
+        with st.expander("🧠 Advanced Scientific Analysis"):
+            scientific_analysis = results['scientific_analysis']
             
-            st.subheader("Key Mechanisms")
-            for mechanism in strategy.get('key_mechanisms', []):
-                st.write(f"• {mechanism}")
+            st.subheader("Quantum Chemistry Analysis")
+            st.write(scientific_analysis.get('quantum_analysis', 'No analysis available'))
             
-            st.subheader("Search Strategy")
-            st.json(strategy.get('search_strategy', {}))
+            st.subheader("Molecular Design Principles")
+            st.write(scientific_analysis.get('molecular_design', 'No design principles available'))
             
-            st.subheader("Innovative Ideas")
-            for idea in strategy.get('innovative_ideas', []):
-                st.write(f"💡 {idea}")
+            st.subheader("Innovative Concepts")
+            for concept in scientific_analysis.get('innovative_concepts', []):
+                st.write(f"💡 {concept}")
+            
+            st.subheader("Critical Functional Groups")
+            for group in scientific_analysis.get('critical_functional_groups', []):
+                st.write(f"🔬 {group}")
+        
+        # Search Strategy
+        with st.expander("🔍 Search Strategy"):
+            search_strategy = results['search_strategy']
+            st.subheader("Search Dimensions")
+            st.json(search_strategy.get('search_dimensions', {}))
+            
+            st.subheader("Compound Class Priorities")
+            for priority in search_strategy.get('compound_class_priorities', []):
+                st.write(f"🎯 {priority.get('class')} - {priority.get('priority')}: {priority.get('reasoning')}")
         
         # Formulations
         st.subheader("🎯 Top Formulations")
@@ -602,13 +614,13 @@ class AdvancedMaterialsDiscoveryApp:
             
         for i, formulation in enumerate(formulations, 1):
             with st.expander(f"Formulation #{i} | Score: {formulation.get('overall_score', 0):.2f} | {formulation.get('agent_type', 'Unknown')}"):
-                self._display_formulation_details(formulation)
+                self._display_formulation_details(formulation, results['scientific_analysis'])
         
         # Visualization
         if len(formulations) > 1:
             self._create_visualizations(formulations)
 
-    def _display_formulation_details(self, formulation: Dict):
+    def _display_formulation_details(self, formulation: Dict, scientific_analysis: Dict):
         """Display detailed information about a formulation"""
         col1, col2 = st.columns(2)
         
@@ -619,10 +631,16 @@ class AdvancedMaterialsDiscoveryApp:
                 composition_data.append({
                     'Name': comp.get('name', 'Unknown'),
                     'Mass %': f"{comp.get('mass_percentage', 0):.1f}%",
-                    'Molecular Weight': comp.get('molecular_weight', 'N/A')
+                    'Molecular Weight': comp.get('molecular_weight', 'N/A'),
+                    'Category': comp.get('category', 'Unknown')
                 })
             composition_df = pd.DataFrame(composition_data)
             st.dataframe(composition_df, use_container_width=True)
+            
+            # Show AI thinking
+            if formulation.get('thinking'):
+                st.subheader("AI Design Thinking")
+                st.info(formulation['thinking'])
             
             st.subheader("Properties")
             if 'predicted_properties' in formulation:
@@ -637,25 +655,31 @@ class AdvancedMaterialsDiscoveryApp:
                 'Overall Score': formulation.get('overall_score', 0),
                 'Innovation Score': formulation.get('innovation_score', 0),
                 'Strategy Alignment': formulation.get('strategy_alignment', 0),
+                'Chemical Diversity': formulation.get('chemical_diversity', 0),
+                'Complexity Score': formulation.get('complexity_score', 0),
+                'Synergy Potential': formulation.get('synergy_potential', 0),
                 'Compatibility Risk': formulation.get('compatibility_risk', 0)
             }
             
             for metric, score in scores.items():
                 st.progress(score, text=f"{metric}: {score:.2f}")
             
-            # Computational insights
-            if formulation.get('computational_insights'):
-                st.subheader("Computational Insights")
-                st.json(formulation['computational_insights'])
-            
             # Scientific evaluation
-            if formulation.get('scientific_evaluation'):
-                st.subheader("Scientific Evaluation")
-                st.json(formulation['scientific_evaluation'])
+            st.subheader("Scientific Context")
+            st.write(f"**Agent Type:** {formulation.get('agent_type', 'Unknown')}")
+            st.write(f"**Innovation Level:** {formulation.get('agent_innovation_level', 0):.2f}")
+            
+            # Computational insights
+            if formulation.get('computational_predictions'):
+                st.subheader("Computational Predictions")
+                for prop_name, prediction in formulation['computational_predictions'].items():
+                    st.write(f"**{prop_name}:** {prediction.get('value', 'N/A')} {prediction.get('units', '')}")
+                    st.write(f"*Confidence: {prediction.get('confidence', 0):.2f}*")
+                    st.write(f"*Reasoning: {prediction.get('reasoning', 'No reasoning available')}*")
             
             # Compatibility warnings
             if formulation.get('compatibility_warnings'):
-                st.subheader("Compatibility Warnings")
+                st.subheader("Compatibility Assessment")
                 for warning in formulation['compatibility_warnings']:
                     if 'HIGH' in warning or 'EXTREME' in warning:
                         st.error(warning)
@@ -672,6 +696,15 @@ class AdvancedMaterialsDiscoveryApp:
         scores = [f.get('overall_score', 0) for f in formulations]
         fig = px.histogram(x=scores, nbins=20, title="Score Distribution", 
                           labels={'x': 'Overall Score', 'y': 'Count'})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Innovation vs Compatibility scatter plot
+        innovation_scores = [f.get('innovation_score', 0) for f in formulations]
+        compatibility_scores = [1 - f.get('compatibility_risk', 0) for f in formulations]
+        
+        fig = px.scatter(x=innovation_scores, y=compatibility_scores, 
+                        title="Innovation vs Compatibility",
+                        labels={'x': 'Innovation Score', 'y': 'Compatibility Score'})
         st.plotly_chart(fig, use_container_width=True)
 
     def run(self):
